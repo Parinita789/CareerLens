@@ -295,6 +295,111 @@
       "options": ["Yes", "No", "Prefer not to say"],
       "expect": { "equals": "No" },
       "notes": "Paraphrase of veteran status"
+    },
+
+    { "$comment": "──── Identity fields that don't hit keyword rules — LLM must use profile/saved context ────" },
+    {
+      "name": "identity-email",
+      "question": "What is your email address?",
+      "type": "text",
+      "expect": { "includes": "@" },
+      "notes": "No 'email' rule. Falls to textarea LLM; should include an '@' from profile"
+    },
+    {
+      "name": "identity-full-name",
+      "question": "What is your full legal name?",
+      "type": "text",
+      "expect": { "includes": "Parinita" },
+      "notes": "No 'name' rule. LLM should reply with the profile name"
+    },
+    {
+      "name": "identity-preferred-name",
+      "question": "What is your preferred first name?",
+      "type": "text",
+      "expect": { "includes": "Parinita" },
+      "notes": "LLM path; preferred name usually = first name"
+    },
+
+    { "$comment": "──── Salary paraphrases — exercise the 3 salary rules + LLM fallback for hourly/range ────" },
+    {
+      "name": "salary-paraphrase-annual",
+      "question": "What is your desired annual compensation?",
+      "type": "text",
+      "expect": { "includes": "180000" },
+      "notes": "Rule 'desired salary' → 180000"
+    },
+    {
+      "name": "salary-paraphrase-current-base",
+      "question": "What is your current base salary?",
+      "type": "text",
+      "expect": { "regex": "(160000|180000|\\d+k|\\d+K)" },
+      "notes": "Rule 'current salary' doesn't match 'current BASE salary' (word boundary); LLM path returns a plausible salary number from saved context — accept either 160000 (rule) or 180000 (LLM reading saved expected)"
+    },
+    {
+      "name": "salary-paraphrase-hourly",
+      "question": "What is your expected hourly rate?",
+      "type": "text",
+      "expect": { "regex": "\\d+" },
+      "notes": "No explicit rule. LLM textarea path; should produce a number"
+    },
+
+    { "$comment": "──── Start date / availability paraphrases ────" },
+    {
+      "name": "availability-earliest-start",
+      "question": "What is your earliest start date?",
+      "type": "text",
+      "expect": { "includes": "2 weeks" },
+      "notes": "Rule 'start date' → 2 weeks"
+    },
+    {
+      "name": "availability-notice-period",
+      "question": "What is your notice period?",
+      "type": "text",
+      "expect": { "regex": "(2 weeks|immediate|immediately|availab)" },
+      "notes": "Paraphrase — no 'notice period' rule. LLM gives either '2 weeks' (saved context) or 'immediately available' (common default); both defensible"
+    },
+    {
+      "name": "availability-start-immediately",
+      "question": "Can you start immediately?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "oneOf": ["Yes", "No"] },
+      "notes": "Paraphrase; either Yes (can start quickly) or No (needs 2w notice) is defensible"
+    },
+
+    { "$comment": "──── Location paraphrases ────" },
+    {
+      "name": "location-where-based",
+      "question": "Where are you currently based?",
+      "type": "text",
+      "expect": { "regex": "San Jose|Fremont|California|United States" },
+      "notes": "Profile context has location. Rule for 'city' returns San Jose"
+    },
+    {
+      "name": "location-onsite-nyc",
+      "question": "Are you willing to work onsite in NYC?",
+      "type": "select",
+      "options": ["Yes", "No", "Open to discuss"],
+      "expect": { "oneOf": ["Yes", "No", "Open to discuss"] },
+      "notes": "LLM call — any of the 3 is a valid answer given preferences"
+    },
+
+    { "$comment": "──── Misc: travel + work mode ────" },
+    {
+      "name": "willing-to-travel",
+      "question": "Are you willing to travel up to 25% of the time?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "oneOf": ["Yes", "No"] },
+      "notes": "LLM; no travel rule — either answer valid"
+    },
+    {
+      "name": "work-model-hybrid",
+      "question": "What is your preferred work model?",
+      "type": "select",
+      "options": ["Remote", "Hybrid", "Onsite"],
+      "expect": { "oneOf": ["Remote", "Hybrid"] },
+      "notes": "Profile remote=Yes; LLM should pick Remote or Hybrid"
     }
   ]
 }

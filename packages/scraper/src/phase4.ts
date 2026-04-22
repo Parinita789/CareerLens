@@ -27,8 +27,13 @@ async function main() {
   const jobsArg = process.argv.find((a) => a.startsWith('--jobs='));
   const specificJobIds = jobsArg ? jobsArg.split('=')[1].split(',') : null;
 
+  // --submit=true|false — gate the final "Submit Application" click. Default
+  // false (dry-run) so running without the flag is always safe.
+  const submitArg = process.argv.find((a) => a.startsWith('--submit='));
+  const submit = submitArg ? submitArg.split('=')[1] === 'true' : false;
+
   console.log('Phase 4 — Auto Apply');
-  console.log(`Platforms: ${allowedPlatforms.join(', ')} | Limit: ${limit === Infinity ? 'all' : limit}${specificJobIds ? ` | Jobs: ${specificJobIds.length} selected` : ''}`);
+  console.log(`Platforms: ${allowedPlatforms.join(', ')} | Limit: ${limit === Infinity ? 'all' : limit}${specificJobIds ? ` | Jobs: ${specificJobIds.length} selected` : ''} | Submit: ${submit ? 'ENABLED' : 'DISABLED (dry-run)'}`);
   console.log('==============================\n');
 
   // Only load specific jobs when IDs are provided (skip loading all 1600+ jobs)
@@ -244,8 +249,8 @@ async function main() {
     let result: any;
     try {
       result = (job.source === 'greenhouse' || job.source === 'ashby')
-        ? await applyViaGreenhouse(page, job)
-        : await applyViaEasyApply(page, job);
+        ? await applyViaGreenhouse(page, job, submit)
+        : await applyViaEasyApply(page, job, submit);
     } catch (err) {
       const msg = (err as Error).message || '';
       if (msg.includes('closed') || msg.includes('destroyed')) {

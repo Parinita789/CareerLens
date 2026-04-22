@@ -125,6 +125,7 @@ export function JobTable({ jobs, activeTab, selectMode, onSelectJob, onDismissJo
           <th>Salary</th>
           {activeTab !== 'rejected' && <th>Tech Stack</th>}
           <th>Platform</th>
+          <th title="When this job was first scraped into the tracker">Scraped</th>
           {activeTab === 'queue' && <th>Posted</th>}
           {activeTab === 'applied' && <th>Applied</th>}
           {activeTab === 'applied' && <th>Status</th>}
@@ -175,6 +176,12 @@ export function JobTable({ jobs, activeTab, selectMode, onSelectJob, onDismissJo
             )}
             <td>
               <span className={`platform ${job.source}`}>{job.source}</span>
+            </td>
+            <td
+              className="scraped-date"
+              title={job.scraped_at ? new Date(job.scraped_at).toLocaleString() : 'unknown'}
+            >
+              {job.scraped_at ? formatRelativeDate(job.scraped_at) : '--'}
             </td>
             {activeTab === 'queue' && (
               <td className="posted-date">

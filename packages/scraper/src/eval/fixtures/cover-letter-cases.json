@@ -1,0 +1,91 @@
+{
+  "$schema": "Each case: { name, job, expect, notes? }. `job` is a JobLike shape consumed by generateCoverLetter. See cover-letter-eval.ts for grading semantics.",
+  "cases": [
+    {
+      "name": "streaming-infra-role",
+      "job": {
+        "title": "Senior Backend Engineer, Streaming Infrastructure",
+        "company": "Affirm",
+        "location": "Remote, US",
+        "description": "Build Kafka and Flink streaming pipelines processing 100K+ events/sec. You will design event-driven microservices in Node.js/TypeScript and coordinate distributed state across services. Experience with AWS, MongoDB, Redis required.",
+        "matched_skills": ["Node.js", "TypeScript", "Kafka", "distributed systems", "AWS"],
+        "reason": "Strong fit — matches distributed-systems + streaming experience from Nium payments platform"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Affirm"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "I am passionate", "I am confident",
+          "I would be a great fit", "resonates with", "I am eager",
+          "honed my skills", "ideal candidate"
+        ],
+        "regex": "\\d+(K|%|[+])"
+      },
+      "notes": "Must cite a concrete metric like 100K or 60%"
+    },
+    {
+      "name": "ai-agent-role",
+      "job": {
+        "title": "Senior Software Engineer, AI Agents",
+        "company": "Anthropic",
+        "location": "San Francisco, CA",
+        "description": "Build LLM-powered agentic workflows using Claude API. Design prompt-engineering patterns, multi-step tool use, and evaluation harnesses for agent reliability.",
+        "matched_skills": ["Claude API", "Prompt Engineering", "LLM integration", "TypeScript"],
+        "reason": "AI role — swap primary achievement to the JobPilot AI agent work"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Anthropic"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "I am passionate",
+          "I would be a great fit", "resonates with", "I am eager"
+        ]
+      },
+      "notes": "AI role triggers selectRelevantAchievements' isAIRole branch — letter should reference the AI agent achievement"
+    },
+    {
+      "name": "platform-leadership-role",
+      "job": {
+        "title": "Staff Software Engineer, Platform",
+        "company": "Webflow",
+        "location": "Remote",
+        "description": "Lead platform engineering for the developer-facing build tooling. Cross-functional work with product and other engineering teams. Launch new platform capabilities quarterly.",
+        "matched_skills": ["Platform", "Leadership", "TypeScript", "Node.js"],
+        "reason": "Leadership + platform focus maps to launch/founding-team experience"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Webflow"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "I am passionate",
+          "I would be a great fit", "resonates with"
+        ]
+      },
+      "notes": "Platform/leadership branch of selectRelevantAchievements"
+    },
+    {
+      "name": "generic-backend-role",
+      "job": {
+        "title": "Backend Engineer",
+        "company": "Acme",
+        "location": "Remote",
+        "description": "Build backend services in Node.js and TypeScript on AWS. Own APIs end-to-end.",
+        "matched_skills": ["Node.js", "TypeScript", "AWS"],
+        "reason": "Standard backend — no special branch, default achievement applies"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Acme"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "I am passionate",
+          "I would be a great fit", "resonates with"
+        ]
+      },
+      "notes": "Default branch — no scale/AI/leadership signal in description"
+    }
+  ]
+}

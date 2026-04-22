@@ -1,0 +1,60 @@
+{
+  "$schema": "Each case = one full form. Fields go through preAnswerFields; expectPerField asserts value and source (which layer answered: 'rule' | 'profile' | 'llm'). Enforces 'LLM is last option' contract.",
+  "cases": [
+    {
+      "name": "greenhouse-backend-typical-form",
+      "job": {
+        "title": "Backend Engineer",
+        "company": "Acme",
+        "description": "Build Node.js services on AWS.",
+        "fit_score": 8,
+        "status": "to_apply",
+        "id": "eval-job-001",
+        "url": "https://example.com/jobs/1",
+        "source": "greenhouse",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "scraped_at": "2026-04-22T00:00:00Z",
+        "matched_skills": ["Node.js", "TypeScript"],
+        "missing_skills": [],
+        "reason": "Strong fit",
+        "apply": true
+      },
+      "fields": [
+        { "fieldId": "f-first", "label": "First Name", "type": "text", "options": [], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-last", "label": "Last Name", "type": "text", "options": [], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-email", "label": "Email Address", "type": "text", "options": [], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-phone", "label": "Phone Number", "type": "text", "options": [], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-linkedin", "label": "LinkedIn Profile", "type": "text", "options": [], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-github", "label": "GitHub URL", "type": "text", "options": [], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-auth", "label": "Are you authorized to work in the US?", "type": "select", "options": ["Yes", "No"], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-sponsor", "label": "Will you require visa sponsorship now or in the future?", "type": "select", "options": ["Yes", "No"], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-relocate", "label": "Are you willing to relocate?", "type": "select", "options": ["Yes", "No"], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-race", "label": "Race/Ethnicity", "type": "select", "options": ["American Indian or Alaska Native", "Asian", "Black or African American", "Hispanic or Latino", "Native Hawaiian or Other Pacific Islander", "White", "Two or More Races", "Decline to self-identify"], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-gender", "label": "Gender", "type": "select", "options": ["Male", "Female", "Non-binary", "Decline to self-identify"], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-veteran", "label": "Are you a protected veteran?", "type": "select", "options": ["Yes, I am a protected veteran", "No, I am not a protected veteran", "I prefer not to answer"], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-disability", "label": "Do you have a disability?", "type": "select", "options": ["Yes, I have a disability", "No, I don't have a disability", "I don't wish to answer"], "required": false, "value": "", "source": "unknown" },
+        { "fieldId": "f-why", "label": "Why do you want to work at Acme?", "type": "textarea", "options": [], "required": true, "value": "", "source": "unknown" },
+        { "fieldId": "f-resume", "label": "Resume", "type": "file", "options": [], "required": true, "value": "", "source": "unknown" }
+      ],
+      "expectPerField": {
+        "f-first":      { "expect": { "equals": "Parinita" },                                    "sourceIn": ["profile"] },
+        "f-last":       { "expect": { "includes": "Kumari" },                                     "sourceIn": ["profile"] },
+        "f-email":      { "expect": { "includes": "@" },                                          "sourceIn": ["profile"] },
+        "f-phone":      { "expect": { "includes": "669" },                                        "sourceIn": ["profile"] },
+        "f-linkedin":   { "expect": { "includes": "linkedin.com" },                               "sourceIn": ["rule", "profile"] },
+        "f-github":     { "expect": { "includes": "github.com" },                                 "sourceIn": ["rule", "profile"] },
+        "f-auth":       { "expect": { "equals": "Yes" },                                          "sourceIn": ["rule", "profile"] },
+        "f-sponsor":    { "expect": { "equals": "No" },                                           "sourceIn": ["rule", "profile"] },
+        "f-relocate":   { "expect": { "equals": "Yes" },                                          "sourceIn": ["rule", "profile"] },
+        "f-race":       { "expect": { "equals": "Asian" },                                        "sourceIn": ["rule", "profile"] },
+        "f-gender":     { "expect": { "equals": "Female" },                                       "sourceIn": ["rule", "profile"] },
+        "f-veteran":    { "expect": { "oneOf": ["No, I am not a protected veteran", "I prefer not to answer"] }, "sourceIn": ["rule", "profile", "llm"] },
+        "f-disability": { "expect": { "oneOf": ["No, I don't have a disability", "I don't wish to answer"] }, "sourceIn": ["rule", "profile", "llm"] },
+        "f-why":        { "expect": { "notIncludes": ["I am thrilled", "I am passionate"] }, "sourceIn": ["llm", "unknown"] },
+        "f-resume":     { "expect": { "includes": "Resume" },                                     "sourceIn": ["profile"] }
+      }
+    }
+  ]
+}

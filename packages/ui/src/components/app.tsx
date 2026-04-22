@@ -34,6 +34,26 @@ export function App() {
   const [newOnlyFilter, setNewOnlyFilter] = useState(false);
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [newJob, setNewJob] = useState({ title: '', company: '', url: '' });
+  // Global "allow bot to submit applications" toggle, persisted in UserModel.settings.
+  const [allowAutoSubmit, setAllowAutoSubmit] = useState<boolean>(false);
+
+  // Load settings once on mount.
+  useEffect(() => {
+    axios.get<{ allowAutoSubmit: boolean }>('/api/settings')
+      .then((r) => setAllowAutoSubmit(r.data?.allowAutoSubmit === true))
+      .catch(() => { /* leave at default false */ });
+  }, []);
+
+  const toggleAllowAutoSubmit = async () => {
+    const next = !allowAutoSubmit;
+    setAllowAutoSubmit(next);
+    try {
+      await axios.put('/api/settings', { allowAutoSubmit: next });
+    } catch {
+      // revert on failure
+      setAllowAutoSubmit(!next);
+    }
+  };
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -169,6 +189,16 @@ export function App() {
     <div className="container">
       <div className="app-header">
         <h1>JobPilot</h1>
+        <label
+          className={`auto-submit-toggle ${allowAutoSubmit ? 'on' : 'off'}`}
+          title={allowAutoSubmit
+            ? 'Bot is ALLOWED to click Submit on every auto-apply. Click to disable (dry-run).'
+            : 'Bot will fill forms but STOP before Submit. Click to enable real submissions.'}
+        >
+          <input type="checkbox" checked={allowAutoSubmit} onChange={toggleAllowAutoSubmit} />
+          <span className="auto-submit-dot" />
+          <span className="auto-submit-label">Auto-submit: {allowAutoSubmit ? 'ON' : 'OFF (dry-run)'}</span>
+        </label>
         <div className="hamburger-wrapper">
           <button className="hamburger-btn" onClick={() => setMenuOpen(!menuOpen)}>
             <span /><span /><span />

@@ -1,6 +1,19 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
+import { UserModel } from '@job-agent/shared';
+
+// Read the global "allow bot to submit" toggle from UserModel.settings. Falls
+// back to false (dry-run) on any error — safe default. Read fresh on every
+// spawn so flipping the UI switch takes effect immediately.
+async function readAllowAutoSubmit(): Promise<boolean> {
+  try {
+    const user = await UserModel.findOne().lean();
+    return ((user as any)?.settings?.allowAutoSubmit as boolean) === true;
+  } catch {
+    return false;
+  }
+}
 
 export interface PipelineState {
   running: boolean;
@@ -132,6 +145,8 @@ export class PipelineService {
     applyLimit?: number,
     applyJobIds?: string[],
   ): Promise<void> {
+    // Global setting drives --submit for every apply spawn below.
+    const allowAutoSubmit = await readAllowAutoSubmit();
     if (this.state.running) {
       // Allow auto-apply to run concurrently with scraping
       const isAutoApply = phaseIds.length === 1 && phaseIds[0] === 'apply';
@@ -151,6 +166,7 @@ export class PipelineService {
         if (applyPlatforms && applyPlatforms.length > 0)
           args.push(`--platforms=${applyPlatforms.join(',')}`);
         if (applyLimit) args.push(`--limit=${applyLimit}`);
+        if (phaseId === 'apply') args.push(`--submit=${allowAutoSubmit}`);
         this.addLog(`--- ${actionName} started (concurrent) ---`);
         this.spawnWithLogs('npx', args, scraperDir)
           .then(() => {
@@ -165,6 +181,7 @@ export class PipelineService {
           args.push(`--platforms=${applyPlatforms.join(',')}`);
         if (applyLimit) args.push(`--limit=${applyLimit}`);
         if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
+        if (phaseId === 'apply') args.push(`--submit=${allowAutoSubmit}`);
         const scraperDir = SCRAPER_DIR_RESOLVER();
         this.addLog(`--- ${actionName} started (concurrent) ---`);
         this.spawnWithLogs(phase.cmd, args, scraperDir)
@@ -194,6 +211,7 @@ export class PipelineService {
             args.push(`--platforms=${applyPlatforms.join(',')}`);
           if (applyLimit) args.push(`--limit=${applyLimit}`);
           if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
+          args.push(`--submit=${allowAutoSubmit}`);
           return { ...phase, args };
         }
         return phase;

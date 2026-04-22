@@ -7,6 +7,7 @@ import { PipelineModule } from './pipeline/pipeline.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { FormAnswersModule } from './form-answers/form-answers.module';
 import { ApplicationFieldsModule } from './application-fields/application-fields.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ApplicationFieldsModule } from './application-fields/application-fields
     AlertsModule,
     FormAnswersModule,
     ApplicationFieldsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

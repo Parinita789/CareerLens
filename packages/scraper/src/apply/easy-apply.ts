@@ -12,7 +12,7 @@ export type ApplicationResult =
   | { success: true; method: 'easy_apply' }
   | { success: false; reason: string };
 
-export async function applyViaEasyApply(page: Page, job: ScoredJob): Promise<ApplicationResult> {
+export async function applyViaEasyApply(page: Page, job: ScoredJob, submit: boolean = false): Promise<ApplicationResult> {
   try {
     // ── Step 1: navigate to job page ──────────────────────────────
     console.log(`  Navigating to job page...`);
@@ -68,6 +68,10 @@ export async function applyViaEasyApply(page: Page, job: ScoredJob): Promise<App
       );
 
       if (submitBtn) {
+        if (!submit) {
+          console.log('  Review step reached — SUBMIT DISABLED (dry-run). Form filled; stopping before click.');
+          return { success: false, reason: 'Submit disabled — review mode' };
+        }
         console.log('  Review step — submitting application...');
         await submitBtn.click();
         await randomDelay();

@@ -1,0 +1,109 @@
+{
+  "$schema": "Each case: { name, job, expect: { fit_score, matched_skills_include, missing_skills_excludes, reasonMinLength, reasonIncludes }, notes? }. See scorer-eval.ts for grading semantics.",
+  "cases": [
+    {
+      "name": "strong-fit-nodejs-backend",
+      "job": {
+        "id": "eval-scorer-001",
+        "title": "Senior Node.js Backend Engineer",
+        "company": "Acme",
+        "location": "Remote, US",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Build TypeScript microservices on AWS using Node.js, Express, MongoDB, Redis, and Kafka. You will own distributed systems at 100K+ RPS. Event-driven architecture.",
+        "url": "https://example.com/jobs/1",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 7, "max": 10 },
+        "matched_skills_include": ["Node"],
+        "missing_skills_excludes": ["Node.js", "TypeScript", "AWS", "MongoDB"],
+        "reasonMinLength": 20
+      },
+      "notes": "Backend Node.js + TypeScript on AWS — candidate's exact stack. Expect 7+"
+    },
+    {
+      "name": "strong-fit-platform-engineer",
+      "job": {
+        "id": "eval-scorer-002",
+        "title": "Staff Platform Engineer",
+        "company": "Acme",
+        "location": "San Francisco, CA",
+        "remote": false,
+        "employment_type": "full-time",
+        "description": "Lead platform engineering for developer tooling. Build Node.js/TypeScript services. Cross-functional work on distributed systems and scale challenges.",
+        "url": "https://example.com/jobs/2",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 6, "max": 10 },
+        "matched_skills_include": ["Node"],
+        "reasonMinLength": 20
+      },
+      "notes": "Platform role with strong Node.js match"
+    },
+    {
+      "name": "weak-fit-java-spring",
+      "job": {
+        "id": "eval-scorer-003",
+        "title": "Senior Java Engineer",
+        "company": "Acme",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Build Spring Boot microservices in Java. JVM performance tuning, Kotlin experience valuable. Hibernate, Spring Cloud.",
+        "url": "https://example.com/jobs/3",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 0, "max": 5 },
+        "reasonMinLength": 15
+      },
+      "notes": "Wrong stack (Java/Spring). Expect low score"
+    },
+    {
+      "name": "weak-fit-frontend-react",
+      "job": {
+        "id": "eval-scorer-004",
+        "title": "Senior Frontend Engineer",
+        "company": "Acme",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Build React + Next.js apps. CSS-in-JS, Webpack, browser performance. Design systems.",
+        "url": "https://example.com/jobs/4",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 0, "max": 5 },
+        "reasonMinLength": 15
+      },
+      "notes": "Wrong role (frontend). Expect low score"
+    },
+    {
+      "name": "borderline-hybrid-fullstack",
+      "job": {
+        "id": "eval-scorer-005",
+        "title": "Fullstack Engineer",
+        "company": "Acme",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Build Node.js backend + React frontend. TypeScript across the stack. Some DevOps.",
+        "url": "https://example.com/jobs/5",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 4, "max": 10 },
+        "matched_skills_include": ["Node"],
+        "reasonMinLength": 15
+      },
+      "notes": "Fullstack has partial overlap — accept 4-10"
+    }
+  ]
+}

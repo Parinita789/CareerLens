@@ -71,6 +71,37 @@ h1 {
   margin-bottom: 0;
 }
 
+/* Global auto-submit toggle in the header. Visible state at all times so the
+   user can't forget whether the bot is in dry-run or live mode. */
+.auto-submit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #3a3a3a);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.auto-submit-toggle input { display: none; }
+.auto-submit-toggle .auto-submit-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #555;
+  transition: background 150ms ease;
+}
+.auto-submit-toggle.on { background: rgba(40, 180, 60, 0.14); border-color: #2cba46; }
+.auto-submit-toggle.on .auto-submit-dot { background: #2cba46; box-shadow: 0 0 8px rgba(44, 186, 70, 0.55); }
+.auto-submit-toggle.off { background: rgba(180, 40, 40, 0.08); border-color: #a43a3a; }
+.auto-submit-toggle.off .auto-submit-dot { background: #b04444; }
+.auto-submit-toggle:hover { filter: brightness(1.15); }
+
 /* Hamburger */
 .hamburger-wrapper {
   position: relative;

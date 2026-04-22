@@ -82,6 +82,12 @@ const userSchema = new mongoose.Schema(
       sexual_orientation: String,   // "Heterosexual" | "Gay or Lesbian" | "" = decline
       citizen_or_permanent_resident: Boolean,
     },
+    // Global settings — master toggles that apply to every bot run. Not
+    // per-invocation; flip these in the UI once and every future auto-apply
+    // respects them.
+    settings: {
+      allowAutoSubmit: { type: Boolean, default: false },   // when false, the bot fills forms but STOPS before clicking "Submit Application"
+    },
   },
   { timestamps: true }
 );

@@ -2840,7 +2840,7 @@ async function handleResumeUpload(page: Page): Promise<void> {
   await sleep(1000);
 }
 
-export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<ApplicationResult> {
+export async function applyViaGreenhouse(page: Page, job: ScoredJob, submit: boolean = false): Promise<ApplicationResult> {
   try {
     let targetUrl: string;
 
@@ -2986,10 +2986,10 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
       /* skip */
     }
 
-    // Click submit button
-    // TEMP: Skip auto-submit for testing — set to true to disable submit
-    // TEMP: Set to false to enable auto-submit
-    const skipSubmit = true;
+    // Click submit button — gated on the `submit` flag threaded through from the UI.
+    // When `submit=false`, the form gets filled and we exit before the final click
+    // (dry-run / review mode). Default is false for safety.
+    const skipSubmit = !submit;
     if (skipSubmit) {
       console.log('  ✓ Form filled (submit disabled). Review mode — will exit shortly.');
       // Snapshot the final form state for diagnostics
