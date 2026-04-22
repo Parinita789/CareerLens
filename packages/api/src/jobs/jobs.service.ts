@@ -1,7 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobModel, CoverLetterModel } from '@job-agent/shared';
-import { spawn } from 'child_process';
-import * as path from 'path';
+import { JobModel, CoverLetterModel, generateCoverLetter as generateCoverLetterShared } from '@job-agent/shared';
 
 @Injectable()
 export class JobsService {
@@ -85,35 +83,22 @@ export class JobsService {
   }
 
   async generateCoverLetter(id: string): Promise<{ cover_letter: string }> {
-    const scraperDir = path.resolve(__dirname, '../../../scraper');
+    if (!/^[a-zA-Z0-9_\-]+$/.test(id)) {
+      throw new Error('Invalid job ID format');
+    }
 
-    return new Promise((resolve, reject) => {
-      // Validate job ID to prevent injection
-      if (!/^[a-zA-Z0-9_\-]+$/.test(id)) {
-        reject(new Error('Invalid job ID format'));
-        return;
-      }
-      const child = spawn('npx', ['tsx', 'src/generate-one-cover-letter.ts', id], {
-        cwd: scraperDir,
-        env: { ...process.env, FORCE_COLOR: '0' },
-      });
+    const job = await JobModel.findOne({ externalId: id }).lean();
+    if (!job) throw new NotFoundException(`Job ${id} not found`);
 
-      let stderr = '';
-      child.stdout.on('data', () => {});
-      child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+    const content = await generateCoverLetterShared(job as any);
 
-      child.on('close', async (code) => {
-        if (code === 0) {
-          const coverLetter = await CoverLetterModel.findOne({ externalJobId: id }).sort({ generatedAt: -1 }).lean();
-          resolve({ cover_letter: coverLetter?.content ?? '' });
-        } else {
-          reject(new Error(stderr || `Process exited with code ${code}`));
-        }
-      });
+    await CoverLetterModel.findOneAndUpdate(
+      { externalJobId: id },
+      { $set: { jobId: (job as any)._id, content, generatedAt: new Date() } },
+      { upsert: true },
+    );
 
-      child.on('error', reject);
-      setTimeout(() => { child.kill(); reject(new Error('Cover letter generation timed out')); }, 60000);
-    });
+    return { cover_letter: content };
   }
 
   async addManualJob(data: { title: string; company: string; url?: string; source?: string }): Promise<any> {

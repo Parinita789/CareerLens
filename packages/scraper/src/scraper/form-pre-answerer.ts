@@ -93,14 +93,29 @@ export function getProfileAnswer(label: string, profile: any, jobCompany?: strin
     return workedThere ? 'Yes' : 'No';
   }
   if (l.includes('opt-in') || l.includes('opt in') || l.includes('whatsapp')) return 'Yes';
-  if (l.includes('consent') || l.includes('checking this box') || l.includes('by checking') || l.includes('i agree') || l.includes('i acknowledge')) return 'Yes';
+  if (
+    l.includes('consent') ||
+    l.includes('checking this box') ||
+    l.includes('by checking') ||
+    l.includes('i agree') ||
+    l.includes('i acknowledge')
+  )
+    return 'Yes';
   if (l.includes('hispanic') || l.includes('latino')) return 'No';
 
   // ── Demographics ──
   if (l.includes('transgender')) return 'No';
   if (l.includes('gender') && l.includes('identify')) return 'Woman';
   if (l.includes('gender')) return 'Female';
-  if (l.includes('identify as') && !l.includes('race') && !l.includes('ethnicity') && !l.includes('veteran') && !l.includes('disability') && !l.includes('orientation')) return 'Cisgender';
+  if (
+    l.includes('identify as') &&
+    !l.includes('race') &&
+    !l.includes('ethnicity') &&
+    !l.includes('veteran') &&
+    !l.includes('disability') &&
+    !l.includes('orientation')
+  )
+    return 'Cisgender';
   if (l.includes('race') || l.includes('ethnicity')) return 'Asian';
   if (l.includes('veteran')) return 'No';
   if (l.includes('disability')) return 'No';
@@ -168,28 +183,34 @@ export function matchOption(answer: string, options: string[]): string | null {
   const exact = options.find((o) => o.toLowerCase().trim() === a);
   if (exact) return exact;
 
-  // ── Specific matchers BEFORE generic contains (to avoid wrong partial matches) ──
-
   // Race: "Asian" → prefer "South Asian", then exact "Asian"
   if (a === 'asian' || a === 'south asian') {
-    return options.find((o) => o.toLowerCase().includes('south asian')) ||
-           options.find((o) => o.toLowerCase().trim() === 'asian' || o.toLowerCase().startsWith('asian')) ||
-           null;
+    return (
+      options.find((o) => o.toLowerCase().includes('south asian')) ||
+      options.find(
+        (o) => o.toLowerCase().trim() === 'asian' || o.toLowerCase().startsWith('asian'),
+      ) ||
+      null
+    );
   }
 
-  // Gender: "Female" ↔ "Woman", "Male" ↔ "Man"
+  // Gender: "Female" ↔ "Woman"
   if (a === 'female' || a === 'woman') {
-    return options.find((o) => o.toLowerCase().includes('female') || o.toLowerCase().includes('woman')) || null;
-  }
-  if (a === 'male' || a === 'man') {
-    return options.find((o) => (o.toLowerCase().includes('male') && !o.toLowerCase().includes('female')) || o.toLowerCase().includes('man')) || null;
+    return (
+      options.find(
+        (o) => o.toLowerCase().includes('female') || o.toLowerCase().includes('woman'),
+      ) || null
+    );
   }
 
   // Gender identity / Sexual orientation: "Cisgender" ↔ "Straight" ↔ "Heterosexual"
   if (a === 'heterosexual' || a === 'straight' || a === 'cisgender') {
-    return options.find((o) => o.toLowerCase().includes('cisgender')) ||
-           options.find((o) => o.toLowerCase().includes('heterosexual')) ||
-           options.find((o) => o.toLowerCase().includes('straight')) || null;
+    return (
+      options.find((o) => o.toLowerCase().includes('cisgender')) ||
+      options.find((o) => o.toLowerCase().includes('heterosexual')) ||
+      options.find((o) => o.toLowerCase().includes('straight')) ||
+      null
+    );
   }
 
   // Contains match (both directions)
@@ -263,19 +284,19 @@ function isRefusal(text: string): boolean {
   if (t.length > 400) return true; // LLM explanatory ramble — too long for a form answer
   const refusalMarkers = [
     "i can't answer",
-    "i cannot answer",
+    'i cannot answer',
     "i don't wish to",
-    "the candidate should",
-    "candidate needs to",
-    "candidate themselves",
-    "i decline to",
+    'the candidate should',
+    'candidate needs to',
+    'candidate themselves',
+    'i decline to',
     "i shouldn't guess",
-    "prefer not to say",
+    'prefer not to say',
     "i'm not able to",
-    "i am not able to",
-    "this is personal",
-    "sensitive personal",
-    "only the candidate",
+    'i am not able to',
+    'this is personal',
+    'sensitive personal',
+    'only the candidate',
     'inferred from',
     'not included in',
     'not something that',

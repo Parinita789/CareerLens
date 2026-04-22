@@ -24,8 +24,12 @@ function parsePostedDate(text: string): string | undefined {
     const unit = match[2].toLowerCase();
     const now = new Date();
     const ms: Record<string, number> = {
-      second: 1000, minute: 60000, hour: 3600000,
-      day: 86400000, week: 604800000, month: 2592000000,
+      second: 1000,
+      minute: 60000,
+      hour: 3600000,
+      day: 86400000,
+      week: 604800000,
+      month: 2592000000,
     };
     return new Date(now.getTime() - num * (ms[unit] || 0)).toISOString();
   }
@@ -139,8 +143,12 @@ export async function scrapeLinkedIn(
 
     await randomDelay();
 
+    const initialCookies = await context.cookies('https://www.linkedin.com').catch(() => []);
+    const isAuthenticated = initialCookies.some((c) => c.name === 'li_at');
+    if (!isAuthenticated) console.log('  No li_at cookie — forcing login flow');
+
     // ── handle login wall ─────────────────────────────────────────────
-    if (isLoginWall(page.url())) {
+    if (isLoginWall(page.url()) || !isAuthenticated) {
       if (sessionLoaded && fs.existsSync(SESSION_FILE)) {
         console.log('  Session expired, clearing...');
         fs.unlinkSync(SESSION_FILE);
@@ -153,18 +161,67 @@ export async function scrapeLinkedIn(
         return scrapeLinkedIn(keywords, location, maxJobs, customUrl);
       }
 
-      console.log('\nLogin wall detected. Please log in manually...\n');
+      if (!isLoginWall(page.url())) {
+        const loginUrl = `https://www.linkedin.com/login?session_redirect=${encodeURIComponent(searchUrl)}`;
+        await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await sleep(1500);
+      }
 
-      await page.waitForFunction(
-        () =>
-          !window.location.href.includes('/login') &&
-          !window.location.href.includes('/authwall') &&
-          !window.location.href.includes('/checkpoint') &&
-          !window.location.href.includes('/signup'),
-        { timeout: 120000, polling: 1000 },
-      );
+      console.log('\n' + '━'.repeat(45));
+      console.log('Login wall detected. Please log in in the browser window.');
+      console.log('Waiting up to 5 minutes for you to finish...');
+      console.log('━'.repeat(45) + '\n');
 
-      console.log('Login successful!');
+      const deadline = Date.now() + 5 * 60 * 1000;
+      let lastLoggedUrl = '';
+      let loggedInUrl: string | null = null;
+      let lastCookieReport = 0;
+
+      while (Date.now() < deadline) {
+        const cur = page.url();
+        const cookies = await context.cookies('https://www.linkedin.com').catch(() => []);
+        const liAt = cookies.find((c) => c.name === 'li_at');
+        if (liAt) {
+          loggedInUrl = cur;
+          break;
+        }
+        if (cur !== lastLoggedUrl) {
+          lastLoggedUrl = cur;
+          const label = cur.includes('/checkpoint')
+            ? 'LinkedIn security check — complete verification (email code / CAPTCHA) in browser'
+            : cur.includes('/authwall')
+              ? 'Auth wall — LinkedIn wants you to sign in'
+              : isLoginWall(cur)
+                ? 'Login page'
+                : 'Transitioning — waiting for auth cookie';
+          console.log(`  [${label}] ${cur}`);
+        }
+
+        if (Date.now() - lastCookieReport > 30_000) {
+          lastCookieReport = Date.now();
+          console.log(
+            `  …still waiting for li_at cookie (have ${cookies.length} LinkedIn cookies so far)`,
+          );
+        }
+        await sleep(2000);
+      }
+
+      if (!loggedInUrl) {
+        const finalUrl = page.url();
+        const shotPath = path.join(__dirname, '../../data/debug-login-timeout.png');
+        await page.screenshot({ path: shotPath }).catch(() => null);
+        console.error(`\nLogin timed out after 5 min. Final URL: ${finalUrl}`);
+        console.error(`Screenshot: ${shotPath}`);
+        console.error(
+          `Hints: 1) Did LinkedIn show a CAPTCHA or email-code step? Complete it before the timeout.`,
+        );
+        console.error(
+          `       2) If LinkedIn keeps rejecting the login, it may be flagging the automated browser — try logging in manually in regular Chrome first to clear the flag.`,
+        );
+        return [];
+      }
+
+      console.log(`Login successful! URL: ${loggedInUrl}`);
       await saveSession(context);
       await sleep(3000);
 
@@ -178,10 +235,15 @@ export async function scrapeLinkedIn(
       await sleep(2000);
     }
 
-    // ── confirm not still on login ────────────────────────────────────
+    // ── confirm not still on login (LinkedIn sometimes bounces back after re-nav) ──
     if (isLoginWall(page.url())) {
-      console.log('Still on login page — saving debug screenshot.');
-      await page.screenshot({ path: path.join(__dirname, '../../data/debug-login-failed.png') });
+      const shotPath = path.join(__dirname, '../../data/debug-login-failed.png');
+      await page.screenshot({ path: shotPath }).catch(() => null);
+      console.error(`Bounced back to login wall after re-nav. URL: ${page.url()}`);
+      console.error(`Screenshot: ${shotPath}`);
+      console.error(
+        `This usually means LinkedIn rejected the session — try deleting data/linkedin-session.json and running again.`,
+      );
       return [];
     }
 
@@ -246,7 +308,9 @@ export async function scrapeLinkedIn(
     // if still 0, try a broad fallback — any <li> inside a jobs list
     if (allCards.length === 0) {
       console.log('Trying broad fallback selectors...');
-      allCards = await page.$$('ul.scaffold-layout__list-container > li, div[class*="jobs-search"] li');
+      allCards = await page.$$(
+        'ul.scaffold-layout__list-container > li, div[class*="jobs-search"] li',
+      );
       console.log(`Fallback found ${allCards.length} cards`);
     }
 
@@ -289,7 +353,9 @@ export async function scrapeLinkedIn(
         const jobRelated = Array.from(document.querySelectorAll('[class*="job"]'));
         const classes = new Set<string>();
         jobRelated.forEach((el) => {
-          el.classList.forEach((c) => { if (c.includes('job')) classes.add(c); });
+          el.classList.forEach((c) => {
+            if (c.includes('job')) classes.add(c);
+          });
         });
         return {
           url: window.location.href,
@@ -388,9 +454,12 @@ export async function scrapeLinkedIn(
         await randomDelay();
 
         await page
-          .waitForSelector('.jobs-description__content, .jobs-description-content, .jobs-description, [class*="jobs-description"]', {
-            timeout: 10000,
-          })
+          .waitForSelector(
+            '.jobs-description__content, .jobs-description-content, .jobs-description, [class*="jobs-description"]',
+            {
+              timeout: 10000,
+            },
+          )
           .catch(() => null);
 
         const description = await page

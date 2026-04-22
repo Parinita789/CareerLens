@@ -7,17 +7,13 @@ import type { ScoredJob } from '../types';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const API_URL = process.env.API_URL || 'http://localhost:3001/api';
 
-/**
- * Answer a question with pause-and-ask fallback.
- * Tries rule-based → LLM → if both fail or answer is empty, posts to API and waits for user.
- */
+// Tries rule-based → LLM → if both fail or answer is empty, posts to API and waits for user.
 export async function answerQuestionWithPause(
   question: string,
   type: 'text' | 'textarea' | 'select' | 'radio',
   job: ScoredJob,
   options?: string[],
 ): Promise<string> {
-  // Ensure current job is set for Q&A logging
   setCurrentJob({ id: job.id, title: job.title, company: job.company });
 
   // For select/radio — try rule-based match only, skip LLM (it generates paragraphs)
@@ -28,15 +24,14 @@ export async function answerQuestionWithPause(
       // For select/radio, verify the answer matches an option
       if ((type === 'select' || type === 'radio') && options?.length) {
         const match = options.find(
-          (o) => o.toLowerCase() === answer.toLowerCase() ||
-                 o.toLowerCase().includes(answer.toLowerCase()) ||
-                 answer.toLowerCase().includes(o.toLowerCase()),
+          (o) =>
+            o.toLowerCase() === answer.toLowerCase() ||
+            o.toLowerCase().includes(answer.toLowerCase()) ||
+            answer.toLowerCase().includes(o.toLowerCase()),
         );
         if (match) {
-          // Already logged by answerQuestion, return
           return match;
         }
-        // No match — fall through to ask user
       } else {
         return answer;
       }
@@ -60,7 +55,6 @@ export async function answerQuestionWithPause(
       options,
     });
 
-    // Poll every 2 seconds until answered
     const maxWait = 5 * 60 * 1000; // 5 min timeout
     const start = Date.now();
 
@@ -74,25 +68,26 @@ export async function answerQuestionWithPause(
           return '';
         }
         console.log(`    ✓ User answered: "${q.answer}"`);
-        // Log to questionanswers collection — skip bot-internal questions
-        const isInternal = question.toLowerCase().includes('review the form') ||
+        const isInternal =
+          question.toLowerCase().includes('review the form') ||
           question.toLowerCase().includes('cover letter for') ||
           question.toLowerCase().includes('bot will detect');
         if (!isInternal) {
-          await logQuestionAnswer(
-            job.id, job.title, job.company,
-            { question, type, options, answer: q.answer, source: 'rule' as const },
-          ).catch(() => {});
+          await logQuestionAnswer(job.id, job.title, job.company, {
+            question,
+            type,
+            options,
+            answer: q.answer,
+            source: 'rule' as const,
+          }).catch(() => {});
         }
         return q.answer;
       }
     }
-
-    console.log(`    ⏰ Timed out waiting for answer`);
+    console.log(`⏰ Timed out waiting for answer`);
   } catch (err) {
-    console.log(`    Failed to post pending question: ${(err as Error).message}`);
+    console.log(`Failed to post pending question: ${(err as Error).message}`);
   }
-
   return '';
 }
 

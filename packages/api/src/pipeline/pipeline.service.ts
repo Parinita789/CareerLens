@@ -14,13 +14,33 @@ export interface PipelineState {
 const SCRAPER_DIR_RESOLVER = () => path.resolve(process.cwd(), '../scraper');
 
 const PHASE_LIST = [
-  { id: 'scrape', label: 'Scrape + Score', name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] },
-  { id: 'gmail-alerts', label: 'Gmail Alerts', name: 'gmail alerts', cmd: 'npx', args: ['tsx', 'src/phase-gmail-alerts.ts', '--watch', '--interval=60'] },
-  { id: 'rescore', label: 'Rescore Jobs', name: 'rescore', cmd: 'npx', args: ['tsx', 'src/rescore.ts'] },
-  { id: 'apply', label: 'Auto Apply', name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] },
+  {
+    id: 'scrape',
+    label: 'Scrape + Score',
+    name: 'scrape + score',
+    cmd: 'npx',
+    args: ['tsx', 'src/phase2.ts'],
+  },
+  {
+    id: 'gmail-alerts',
+    label: 'Gmail Alerts',
+    name: 'gmail alerts',
+    cmd: 'npx',
+    args: ['tsx', 'src/phase-gmail-alerts.ts', '--watch', '--interval=60'],
+  },
+  {
+    id: 'apply',
+    label: 'Auto Apply',
+    name: 'auto apply',
+    cmd: 'npx',
+    args: ['tsx', 'src/phase4.ts'],
+  },
 ];
 
-const COMMANDS: Record<string, { label: string; phases: { name: string; cmd: string; args: string[] }[] }> = {
+const COMMANDS: Record<
+  string,
+  { label: string; phases: { name: string; cmd: string; args: string[] }[] }
+> = {
   pipeline: {
     label: 'Full Pipeline',
     phases: [
@@ -29,42 +49,23 @@ const COMMANDS: Record<string, { label: string; phases: { name: string; cmd: str
       { name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] },
     ],
   },
-  alerts: {
-    label: 'LinkedIn Alerts',
-    phases: [
-      { name: 'scrape alerts + score', cmd: 'npx', args: ['tsx', 'src/phase-alerts.ts'] },
-    ],
-  },
   scrape: {
     label: 'Scrape + Score',
-    phases: [
-      { name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] },
-    ],
-  },
-  rescore: {
-    label: 'Rescore Jobs',
-    phases: [
-      { name: 'rescore', cmd: 'npx', args: ['tsx', 'src/rescore.ts'] },
-    ],
+    phases: [{ name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] }],
   },
   'cover-letters': {
     label: 'Generate Cover Letters',
-    phases: [
-      { name: 'cover letters', cmd: 'npx', args: ['tsx', 'src/phase3.ts'] },
-    ],
+    phases: [{ name: 'cover letters', cmd: 'npx', args: ['tsx', 'src/phase3.ts'] }],
   },
   apply: {
     label: 'Auto Apply',
-    phases: [
-      { name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] },
-    ],
+    phases: [{ name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] }],
   },
 };
 
 @Injectable()
 export class PipelineService {
   private currentChild: ChildProcess | null = null;
-  private autoApplyChild: ChildProcess | null = null;
   private cancelled = false;
 
   private state: PipelineState = {
@@ -124,7 +125,13 @@ export class PipelineService {
     this.runPhasesSequentially(command.phases, scraperDir);
   }
 
-  async runSelectedPhases(phaseIds: string[], scrapeSources?: string[], applyPlatforms?: string[], applyLimit?: number, applyJobIds?: string[]): Promise<void> {
+  async runSelectedPhases(
+    phaseIds: string[],
+    scrapeSources?: string[],
+    applyPlatforms?: string[],
+    applyLimit?: number,
+    applyJobIds?: string[],
+  ): Promise<void> {
     if (this.state.running) {
       // Allow auto-apply to run concurrently with scraping
       const isAutoApply = phaseIds.length === 1 && phaseIds[0] === 'apply';
@@ -138,31 +145,35 @@ export class PipelineService {
       const phaseId = isAutoApply ? 'apply' : 'cover-letters';
       const phase = PHASE_LIST.find((p) => p.id === phaseId);
       if (!phase) {
-        // Phase might have been removed from PHASE_LIST (cover-letters was removed)
-        // Use raw command
         const scraperDir = SCRAPER_DIR_RESOLVER();
         const args = ['tsx', phaseId === 'apply' ? 'src/phase4.ts' : 'src/phase3.ts'];
         if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
-        if (applyPlatforms && applyPlatforms.length > 0) args.push(`--platforms=${applyPlatforms.join(',')}`);
+        if (applyPlatforms && applyPlatforms.length > 0)
+          args.push(`--platforms=${applyPlatforms.join(',')}`);
         if (applyLimit) args.push(`--limit=${applyLimit}`);
         this.addLog(`--- ${actionName} started (concurrent) ---`);
-        this.spawnWithLogs('npx', args, scraperDir).then(() => {
-          this.addLog(`--- ${actionName} completed ---`);
-        }).catch((err) => {
-          this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
-        });
+        this.spawnWithLogs('npx', args, scraperDir)
+          .then(() => {
+            this.addLog(`--- ${actionName} completed ---`);
+          })
+          .catch((err) => {
+            this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
+          });
       } else {
         const args = [...phase.args];
-        if (applyPlatforms && applyPlatforms.length > 0) args.push(`--platforms=${applyPlatforms.join(',')}`);
+        if (applyPlatforms && applyPlatforms.length > 0)
+          args.push(`--platforms=${applyPlatforms.join(',')}`);
         if (applyLimit) args.push(`--limit=${applyLimit}`);
         if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
         const scraperDir = SCRAPER_DIR_RESOLVER();
         this.addLog(`--- ${actionName} started (concurrent) ---`);
-        this.spawnWithLogs(phase.cmd, args, scraperDir).then(() => {
-          this.addLog(`--- ${actionName} completed ---`);
-        }).catch((err) => {
-          this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
-        });
+        this.spawnWithLogs(phase.cmd, args, scraperDir)
+          .then(() => {
+            this.addLog(`--- ${actionName} completed ---`);
+          })
+          .catch((err) => {
+            this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
+          });
       }
       return;
     }
@@ -179,7 +190,8 @@ export class PipelineService {
         }
         if (id === 'apply') {
           const args = [...phase.args];
-          if (applyPlatforms && applyPlatforms.length > 0) args.push(`--platforms=${applyPlatforms.join(',')}`);
+          if (applyPlatforms && applyPlatforms.length > 0)
+            args.push(`--platforms=${applyPlatforms.join(',')}`);
           if (applyLimit) args.push(`--limit=${applyLimit}`);
           if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
           return { ...phase, args };
@@ -192,9 +204,10 @@ export class PipelineService {
       throw new Error('No valid phases selected');
     }
 
-    const label = phases.length === PHASE_LIST.length
-      ? 'Full Pipeline'
-      : phases.map((p) => p.label).join(' + ');
+    const label =
+      phases.length === PHASE_LIST.length
+        ? 'Full Pipeline'
+        : phases.map((p) => p.label).join(' + ');
 
     this.state = {
       running: true,

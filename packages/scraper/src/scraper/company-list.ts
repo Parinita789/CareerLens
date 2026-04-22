@@ -6,8 +6,6 @@ export interface CompanyConfig {
 }
 
 // Only verified slugs — all return 200 from Greenhouse/Lever APIs.
-// To add a company: find their real slug from a job posting URL
-// (e.g. boards.greenhouse.io/{slug}/jobs/123) and run npm run scraper:verify
 export const TARGET_COMPANIES: CompanyConfig[] = [
   // ── Fintech ───────────────────────────────────────────────────────
   // { name: 'Stripe', ats: 'greenhouse', slug: 'stripe', domain: 'Fintech' },

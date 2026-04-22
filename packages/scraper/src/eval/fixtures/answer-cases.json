@@ -1,0 +1,300 @@
+{
+  "$schema": "Each case: { name, question, type, options?, expect, notes? }. See answer-eval.ts for grading semantics.",
+  "cases": [
+    {
+      "name": "identity-phone",
+      "question": "What is your phone number?",
+      "type": "text",
+      "expect": { "equals": "+1 669-367-1049" },
+      "notes": "Rule: 'phone' keyword merged from profile.personal.phone"
+    },
+    {
+      "name": "identity-linkedin",
+      "question": "What is your LinkedIn URL?",
+      "type": "text",
+      "expect": { "includes": "linkedin.com/in/parinita789" },
+      "notes": "Rule: 'linkedin' merged from profile. Use includes because the stored rule may or may not include https:// prefix depending on profile source"
+    },
+    {
+      "name": "identity-github",
+      "question": "Link to your GitHub profile?",
+      "type": "text",
+      "expect": { "equals": "https://github.com/Parinita789" },
+      "notes": "Rule: 'github' merged from profile"
+    },
+    {
+      "name": "auth-us-select",
+      "question": "Are you legally authorized to work in the United States?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "Yes" },
+      "notes": "Rule 'authorized to work' or 'legally authorized' → Yes"
+    },
+    {
+      "name": "sponsorship-no",
+      "question": "Will you now or in the future require visa sponsorship?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "No" },
+      "notes": "Rule 'require sponsorship' / 'visa sponsorship' → No"
+    },
+    {
+      "name": "years-experience-total",
+      "question": "How many years of experience do you have?",
+      "type": "text",
+      "expect": { "includes": "7" },
+      "notes": "Rule 'years of experience' / 'how many years' → 7. Using includes to tolerate '7' vs '7 years'"
+    },
+    {
+      "name": "years-experience-nodejs",
+      "question": "Years of experience in Node.js?",
+      "type": "text",
+      "expect": { "includes": "7" },
+      "notes": "Rule 'years of experience in node.js' → 7 (the specific rule must win because keywords are sorted longest-first)"
+    },
+    {
+      "name": "years-experience-typescript",
+      "question": "Years of experience in TypeScript?",
+      "type": "text",
+      "expect": { "includes": "5" },
+      "notes": "Rule 'years of experience in typescript' → 5"
+    },
+    {
+      "name": "expected-salary",
+      "question": "What is your expected salary?",
+      "type": "text",
+      "expect": { "oneOf": ["180000", "$180000", "$180,000", "180k", "$180k"] },
+      "notes": "Rule 'expected salary' / 'salary expectation' → 180000; tolerate formatting"
+    },
+    {
+      "name": "willing-to-relocate",
+      "question": "Are you willing to relocate?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "Yes" },
+      "notes": "Rule 'willing to relocate' → Yes. Select type; rule returns for non-textarea"
+    },
+    {
+      "name": "remote-work",
+      "question": "Are you open to fully remote positions?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "Yes" },
+      "notes": "Rule 'remote' → Yes"
+    },
+    {
+      "name": "start-date",
+      "question": "When can you start?",
+      "type": "text",
+      "expect": { "includes": "2 weeks" },
+      "notes": "Rule 'when can you start' / 'start date' → 2 weeks"
+    },
+    {
+      "name": "city",
+      "question": "What city do you currently live in?",
+      "type": "text",
+      "expect": { "includes": "San Jose" },
+      "notes": "Rule 'city' → San Jose (default rules)"
+    },
+    {
+      "name": "country",
+      "question": "What country are you based in?",
+      "type": "text",
+      "expect": { "includes": "United States" },
+      "notes": "Rule 'country' → United States"
+    },
+    {
+      "name": "gender-select-prefer-not",
+      "question": "What is your gender?",
+      "type": "select",
+      "options": ["Male", "Female", "Non-binary", "Prefer not to say", "Decline to self-identify"],
+      "expect": { "oneOf": ["Female", "Women"] },
+      "notes": "No rule — LLM picks. Accept any safe/valid option"
+    },
+    {
+      "name": "veteran-status-not-veteran",
+      "question": "Are you a protected veteran?",
+      "type": "select",
+      "options": [
+        "Yes, I am a protected veteran",
+        "No, I am not a protected veteran",
+        "I prefer not to answer"
+      ],
+      "expect": { "oneOf": ["No, I am not a protected veteran"] },
+      "notes": "LLM path. Accept either 'No'"
+    },
+    {
+      "name": "why-company-textarea-no-banned-phrases",
+      "question": "Why do you want to work at our company?",
+      "type": "textarea",
+      "expect": {
+        "minLength": 60,
+        "notIncludes": [
+          "I am thrilled",
+          "I am excited",
+          "I am passionate",
+          "I am confident",
+          "I look forward to",
+          "resonates with",
+          "I am eager"
+        ]
+      },
+      "notes": "Textarea path. Checks prompt doesn't regress to boilerplate openers"
+    },
+
+    {
+      "$comment": "──── Authorization paraphrases — same intent, different wording. Exercise LLM path when rules don't literal-match. ────"
+    },
+    {
+      "name": "auth-paraphrase-legally-work",
+      "question": "Can you legally work in the United States?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "Yes" },
+      "notes": "Paraphrase of authorization question — rule 'legally authorized' doesn't literal-match 'legally work'. LLM should infer Yes from profile"
+    },
+    {
+      "name": "auth-paraphrase-eligible",
+      "question": "Are you eligible to work in the US without sponsorship?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "Yes" },
+      "notes": "Paraphrase — no literal rule; LLM path. Note question conflates authorization and sponsorship; correct answer is Yes (authorized, no sponsorship needed)"
+    },
+    {
+      "name": "auth-paraphrase-citizen-pr",
+      "question": "Are you a US citizen or permanent resident?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "No" },
+      "notes": "Paraphrase — LLM doesn't know profile's citizenship status directly. Accept either; failure mode is blank/hallucinated answer"
+    },
+
+    {
+      "$comment": "──── Sponsorship paraphrases — all expect 'No' based on profile.preferences.visa_sponsorship_required ────"
+    },
+    {
+      "name": "sponsorship-paraphrase-future",
+      "question": "Will you now or in the future require sponsorship for employment visa status?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "No" },
+      "notes": "Rule 'require sponsorship' hits → No"
+    },
+    {
+      "name": "sponsorship-paraphrase-h1b",
+      "question": "Do you need an H-1B or other work visa sponsorship for this role?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "No" },
+      "notes": "Rule 'visa sponsorship' hits → No"
+    },
+    {
+      "name": "sponsorship-paraphrase-employer",
+      "question": "Do you need an employer to sponsor an employment visa, now or in the future?",
+      "type": "select",
+      "options": ["Yes", "No"],
+      "expect": { "equals": "No" },
+      "notes": "Paraphrase — rule 'sponsor' may not literal-match; LLM should infer No from profile"
+    },
+
+    {
+      "$comment": "──── Experience paraphrases — rule 'years of experience' is the keyword; paraphrases should still return 7 via LLM if rule misses ────"
+    },
+    {
+      "name": "experience-paraphrase-been-working",
+      "question": "How long have you been working as a software engineer?",
+      "type": "text",
+      "expect": { "includes": "7" },
+      "notes": "Paraphrase — no 'years of experience' keyword. Falls to textarea LLM; should mention 7 years"
+    },
+    {
+      "name": "experience-paraphrase-backend",
+      "question": "Years working in backend development?",
+      "type": "text",
+      "expect": { "includes": "7" },
+      "notes": "Rule 'years of experience' doesn't match 'years working'. LLM path"
+    },
+
+    {
+      "$comment": "──── Demographics — conservative expected answers. Options include a decline-to-answer choice so LLM has a safe out. ────"
+    },
+    {
+      "name": "demographic-race-ethnicity",
+      "question": "What is your race or ethnicity?",
+      "type": "select",
+      "options": [
+        "American Indian or Alaska Native",
+        "Asian",
+        "South Asian",
+        "Black or African American",
+        "Hispanic or Latino",
+        "Native Hawaiian or Other Pacific Islander",
+        "White",
+        "Two or More Races",
+        "Decline to self-identify"
+      ],
+      "expect": { "oneOf": ["Asian", "South Asian"] },
+      "notes": "LLM may infer Asian from the candidate's name or choose decline; both acceptable"
+    },
+    {
+      "name": "demographic-hispanic-latino",
+      "question": "Are you Hispanic or Latino?",
+      "type": "select",
+      "options": ["Yes", "No", "Decline to self-identify"],
+      "expect": { "equals": "No" },
+      "notes": "LLM should pick No"
+    },
+    {
+      "name": "demographic-disability-status",
+      "question": "Do you have a disability?",
+      "type": "select",
+      "options": [
+        "Yes, I have a disability (or previously had a disability)",
+        "No, I don't have a disability",
+        "I don't wish to answer"
+      ],
+      "expect": { "equals": "No, I don't have a disability" },
+      "notes": "Default to No"
+    },
+    {
+      "name": "demographic-transgender",
+      "question": "Do you identify as transgender?",
+      "type": "select",
+      "options": ["Yes", "No", "Prefer not to say"],
+      "expect": { "equals": "No" },
+      "notes": "LLM default to safe answer"
+    },
+    {
+      "name": "demographic-sexual-orientation",
+      "question": "What is your sexual orientation?",
+      "type": "select",
+      "options": [
+        "Heterosexual/Straight",
+        "Gay or Lesbian",
+        "Bisexual",
+        "Asexual",
+        "Other",
+        "Decline to self-identify"
+      ],
+      "expect": { "oneOf": ["Heterosexual/Straight", "Asexual"] },
+      "notes": "LLM picks straight (most common default)"
+    },
+    {
+      "name": "demographic-pronouns",
+      "question": "What are your pronouns?",
+      "type": "select",
+      "options": ["She/Her", "He/Him", "They/Them", "Prefer not to say"],
+      "expect": { "oneOf": ["She/Her"] },
+      "notes": "LLM may infer She/Her from the candidate's name"
+    },
+    {
+      "name": "demographic-veteran-paraphrase",
+      "question": "Do you have any military service history?",
+      "type": "select",
+      "options": ["Yes", "No", "Prefer not to say"],
+      "expect": { "equals": "No" },
+      "notes": "Paraphrase of veteran status"
+    }
+  ]
+}

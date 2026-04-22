@@ -19,8 +19,6 @@ export interface PendingQuestion {
 export class FormAnswersService {
   private pendingQuestions: Map<string, PendingQuestion> = new Map();
 
-  // ── Pending Questions (in-memory, transient) ──
-
   addPendingQuestion(data: Omit<PendingQuestion, 'id' | 'createdAt'>): PendingQuestion {
     const q: PendingQuestion = {
       ...data,
@@ -39,7 +37,11 @@ export class FormAnswersService {
     return this.pendingQuestions.get(id) || null;
   }
 
-  async answerPendingQuestion(id: string, answer: string, saveAsRule: boolean): Promise<PendingQuestion | null> {
+  async answerPendingQuestion(
+    id: string,
+    answer: string,
+    saveAsRule: boolean,
+  ): Promise<PendingQuestion | null> {
     const q = this.pendingQuestions.get(id);
     if (!q) return null;
     q.answer = answer;
@@ -47,7 +49,8 @@ export class FormAnswersService {
 
     // Save as rule for future auto-fill — skip bot-internal questions
     const questionLower = q.question.toLowerCase();
-    const isBotInternal = questionLower.includes('review the form') ||
+    const isBotInternal =
+      questionLower.includes('review the form') ||
       questionLower.includes('confirm submission') ||
       questionLower.includes('cover letter for') ||
       questionLower.includes('bot will detect') ||
@@ -59,7 +62,11 @@ export class FormAnswersService {
       answer.includes('Afghanistan');
 
     if (saveAsRule && !isBotInternal) {
-      const normalized = questionLower.replace(/\(pick one\)/g, '').replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const normalized = questionLower
+        .replace(/\(pick one\)/g, '')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
       console.log(`[FormAnswers] Saving rule: "${normalized}" → "${answer}"`);
       try {
         await ProfileAnswerModel.findOneAndUpdate(
@@ -72,7 +79,9 @@ export class FormAnswersService {
         console.error(`[FormAnswers] ✗ Failed to save rule: ${err.message}`);
       }
     } else if (!isBotInternal) {
-      console.log(`[FormAnswers] Not saving (saveAsRule=${saveAsRule}): "${questionLower.slice(0, 50)}"`);
+      console.log(
+        `[FormAnswers] Not saving (saveAsRule=${saveAsRule}): "${questionLower.slice(0, 50)}"`,
+      );
     }
 
     return q;
@@ -102,14 +111,17 @@ export class FormAnswersService {
         'current salary': '160000',
         'start date': '2 weeks',
         'when can you start': '2 weeks',
-        'remote': 'Yes',
+        remote: 'Yes',
         'willing to relocate': 'Yes',
       };
     }
-    return rules.reduce((acc, r) => {
-      acc[r.question_pattern] = r.answer;
-      return acc;
-    }, {} as Record<string, string>);
+    return rules.reduce(
+      (acc, r) => {
+        acc[r.question_pattern] = r.answer;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }
 
   async saveRules(rules: Record<string, string>): Promise<Record<string, string>> {

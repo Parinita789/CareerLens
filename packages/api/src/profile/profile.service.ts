@@ -25,7 +25,7 @@ async function callOllamaDirectly(prompt: string): Promise<string> {
     }),
   });
 
-  const data = await response.json() as any;
+  const data = (await response.json()) as any;
   return data.choices[0].message.content.trim();
 }
 
@@ -78,11 +78,9 @@ export class ProfileService {
     }
 
     const prompt = `Extract a candidate profile from this resume as JSON. No markdown, no explanation, ONLY the JSON object.
-
-Fields: personal{name,email,phone,location,linkedin,github}, experience{total_years,current_level,summary}, skills{languages[],frameworks[],databases[],messaging[],cloud[],devops[],architecture[],ai[],tools[],methodologies[]}, top_achievements[{company,impact}] (2-4 with metrics), work_history[{company,location,title,start,end,duration_years}], preferences{target_roles[],location{current_city,remote:true,hybrid_us:true,onsite:true},employment_type:["full-time"],preferred_domains[]}, compensation{base_salary_min:0,base_salary_preferred:0}, deal_breakers[], strengths_for_agent{use_for_cover_letter[],ats_keywords[]}
-
-Resume:
-${resumeText.slice(0, 4000)}`;
+                    Fields: personal{name,email,phone,location,linkedin,github}, experience{total_years,current_level,summary}, skills{languages[],frameworks[],databases[],messaging[],cloud[],devops[],architecture[],ai[],tools[],methodologies[]}, top_achievements[{company,impact}] (2-4 with metrics), work_history[{company,location,title,start,end,duration_years}], preferences{target_roles[],location{current_city,remote:true,hybrid_us:true,onsite:true},employment_type:["full-time"],preferred_domains[]}, compensation{base_salary_min:0,base_salary_preferred:0}, deal_breakers[], strengths_for_agent{use_for_cover_letter[],ats_keywords[]}
+                    Resume:
+                    ${resumeText.slice(0, 4000)}`;
 
     console.log('[Resume] Sending to LLM...');
     const startTime = Date.now();
@@ -93,7 +91,9 @@ ${resumeText.slice(0, 4000)}`;
       console.error('[Resume] LLM failed:', (err as Error).message);
       throw new Error(`Resume parsing failed: ${(err as Error).message}`);
     }
-    console.log(`[Resume] Response: ${responseText.length} chars in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+    console.log(
+      `[Resume] Response: ${responseText.length} chars in ${((Date.now() - startTime) / 1000).toFixed(1)}s`,
+    );
 
     // Extract JSON
     let jsonStr = responseText;

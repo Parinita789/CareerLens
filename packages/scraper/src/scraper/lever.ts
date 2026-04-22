@@ -55,8 +55,6 @@ function isRelevantRole(title: string, description: string, location: string): b
     'platform engineer',
     'fullstack',
     'full stack',
-    'staff engineer',
-    'principal engineer',
     'senior engineer',
     'senior developer',
     'engineer ii',
@@ -212,6 +210,7 @@ export async function scrapeLever(companySlug: string, companyName: string): Pro
         url: posting.hostedUrl ?? posting.applyUrl ?? '',
         source: 'lever' as const,
         scraped_at: new Date().toISOString(),
+        posted_at: posting.createdAt ? new Date(posting.createdAt).toISOString() : undefined,
       });
     }
 

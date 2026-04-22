@@ -54,14 +54,14 @@ You are evaluating job fit for a specific candidate. Be strict and accurate.
 ${workSummary}
 
 ## Scoring Rubric — use this exactly
-9-10: Perfect match. Core stack identical (Node.js/TypeScript), distributed systems, backend-focused. Seniority from Senior to Staff is fine.
-7-8:  Good match. Most requirements align, 1-2 minor gaps, backend-heavy role. Staff-level roles where tech stack matches should score 7+.
+9-10: Perfect match. Core stack identical (Node.js/TypeScript), distributed systems, backend-focused. Seniority from Senior to lead is fine.
+7-8:  Good match. Most requirements align, 1-2 minor gaps, backend-heavy role. senior, lead-level roles where tech stack matches should score 7+.
 5-6:  Partial match. Some overlap but significant gaps or role is not pure backend.
 3-4:  Weak match. Different primary stack (.NET, Java, Python-only) or wrong domain entirely.
 1-2:  Poor match. Completely different stack, role type, or seniority level.
 
 ## Important: Seniority is NOT a disqualifier
-- Candidate has 7 years of experience — this qualifies for Senior AND Staff roles.
+- Candidate has 7 years of experience — this qualifies for Senior AND Lead roles.
 - Do NOT penalize score for Staff/Principal titles if the tech stack matches.
 - Score based on TECH STACK FIT, not job title seniority.
 
@@ -79,7 +79,7 @@ Job: "Senior Backend Engineer, Node.js/TypeScript, distributed systems, payment 
 Output: {
   "fit_score": 9,
   "apply": true,
-  "matched_skills": ["Node.js", "TypeScript", "AWS", "microservices", "distributed systems"],
+  "matched_skills": ["Node.js", "TypeScript", "AWS", "microservices", "distributed systems", "Javascript"],
   "missing_skills": [],
   "reason": "Near-perfect match on stack, architecture patterns, and seniority level."
 }
@@ -150,7 +150,8 @@ interface ScoreResult {
 
 async function callWithRetry(prompt: string): Promise<string> {
   return llmChatWithRetry(prompt, {
-    system: 'You are a JSON-only assistant. Always respond with valid JSON. No explanations, no markdown.',
+    system:
+      'You are a JSON-only assistant. Always respond with valid JSON. No explanations, no markdown.',
     temperature: 0.1,
     maxTokens: 300,
     jsonMode: true,

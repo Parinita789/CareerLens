@@ -10,12 +10,9 @@
   ],
   "scripts": {
     "scraper": "npm run dev -w packages/scraper",
-    "scraper:rescore": "npm run rescore -w packages/scraper",
     "scraper:phase3": "npm run phase3 -w packages/scraper",
     "scraper:phase3:force": "npm run phase3:force -w packages/scraper",
-    "scraper:alerts": "npm run alerts -w packages/scraper",
     "scraper:gmail-alerts": "npx tsx packages/scraper/src/phase-gmail-alerts.ts --watch --interval=60",
-    "migrate": "npx tsx packages/scraper/src/migrate-to-mongo.ts",
     "scraper:phase4": "npm run phase4 -w packages/scraper",
     "api": "NODE_ENV=development npm run start:dev -w packages/api",
     "api:prod": "NODE_ENV=production npm run start -w packages/api",
@@ -23,6 +20,9 @@
     "lint": "eslint packages/*/src --ext .ts,.tsx",
     "format": "prettier --write packages/*/src",
     "scraper:verify": "npm run verify-slugs -w packages/scraper",
+    "eval:answers": "npm run eval:answers -w packages/scraper",
+    "eval:seed-rules": "npm run eval:seed-rules -w packages/scraper",
+    "eval:seed-demographics": "npm run eval:seed-demographics -w packages/scraper",
     "test": "vitest run",
     "test:watch": "vitest"
   },

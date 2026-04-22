@@ -4,11 +4,9 @@ import * as path from 'path';
 import mongoose from 'mongoose';
 import { AppModule } from './app.module';
 
-// Load .env before anything else
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 async function bootstrap() {
-  // Connect the default mongoose instance so shared models (JobModel etc.) work
   const uri = process.env.MONGO_URI || 'mongodb://localhost:27017/job-tracker';
   await mongoose.connect(uri);
   console.log(`[MongoDB] Connected to: ${uri}`);
@@ -17,6 +15,17 @@ async function bootstrap() {
 
   app.enableCors({
     origin: 'http://localhost:5173',
+  });
+
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const ms = Date.now() - start;
+      console.log(
+        `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${ms}ms)`,
+      );
+    });
+    next();
   });
 
   app.setGlobalPrefix('api');

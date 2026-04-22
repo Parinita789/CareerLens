@@ -22,11 +22,9 @@ function loadAlerts(): Alert[] {
   return JSON.parse(content);
 }
 
-/**
- * Scrapes jobs matching your LinkedIn alert keywords.
- * Reads keywords from data/alerts.json (managed via the UI).
- */
-export async function scrapeLinkedInAlerts(maxJobsPerAlert: number = JOBS_PER_ALERT): Promise<JobListing[]> {
+export async function scrapeLinkedInAlerts(
+  maxJobsPerAlert: number = JOBS_PER_ALERT,
+): Promise<JobListing[]> {
   const alerts = loadAlerts();
 
   if (alerts.length === 0) {

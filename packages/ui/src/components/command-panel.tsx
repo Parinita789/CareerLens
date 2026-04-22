@@ -10,7 +10,6 @@ interface Phase {
 const PHASE_DESCRIPTIONS: Record<string, string> = {
   scrape: 'Select platforms below',
   'gmail-alerts': 'Checks Gmail every 1 hr',
-  rescore: 'Re-evaluate all jobs',
   apply: 'Select platforms below',
 };
 
@@ -22,6 +21,7 @@ const APPLY_PLATFORMS = [
 const SCRAPE_SOURCES = [
   { id: 'linkedin', label: 'LinkedIn' },
   { id: 'greenhouse', label: 'Greenhouse' },
+  { id: 'ashby', label: 'Ashby' },
   { id: 'lever', label: 'Lever' },
   { id: 'indeed', label: 'Indeed' },
 ];

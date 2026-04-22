@@ -47,7 +47,7 @@ function callClaudeCli(prompt: string, system?: string): Promise<string> {
       '-p', fullPrompt,
       '--output-format', 'text',
       '--dangerously-skip-permissions',
-      '--model', 'claude-opus-4-6',
+      '--model', 'claude-sonnet-4-6',
     ], {
       maxBuffer: 1024 * 1024,
       timeout: 120000,

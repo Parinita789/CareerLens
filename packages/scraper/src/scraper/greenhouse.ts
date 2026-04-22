@@ -206,6 +206,7 @@ export async function scrapeGreenhouse(
         url,
         source: 'greenhouse' as const,
         scraped_at: new Date().toISOString(),
+        posted_at: job.updated_at ?? job.first_published,
       });
     }
 

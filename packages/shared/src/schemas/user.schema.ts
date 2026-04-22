@@ -68,6 +68,20 @@ const userSchema = new mongoose.Schema(
       use_for_cover_letter: [String],
       ats_keywords: [String],
     },
+    // Demographics — source of truth for EEO / self-identification questions.
+    // Injected into every LLM answer prompt so paraphrased questions resolve
+    // deterministically without needing per-phrasing keyword rules.
+    demographics: {
+      race: String,                 // e.g. "Asian", "White", "Black or African American", "" = decline
+      hispanic_or_latino: Boolean,
+      gender: String,               // "Male" | "Female" | "Non-binary" | "" = decline
+      pronouns: String,             // "She/Her" | "He/Him" | "They/Them" | ""
+      disability: Boolean,
+      veteran: Boolean,
+      transgender: Boolean,
+      sexual_orientation: String,   // "Heterosexual" | "Gay or Lesbian" | "" = decline
+      citizen_or_permanent_resident: Boolean,
+    },
   },
   { timestamps: true }
 );

@@ -50,43 +50,54 @@ async function scrapeJobPage(
 ): Promise<JobListing | null> {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForSelector('h1', { timeout: 8000 }).catch(() => null);
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => null);
+    // LinkedIn hydrates the job detail panel lazily — scroll to trigger it.
+    await page.evaluate(() => window.scrollBy(0, 500));
+    await page.waitForTimeout(1200);
 
-    const title = await page.$eval('h1', (el: Element) => el.textContent?.trim() ?? '').catch(() => '');
-
-    const company = await page.$eval(
-      [
-        '.job-details-jobs-unified-top-card__company-name a',
-        '.job-details-jobs-unified-top-card__company-name',
-        '.jobs-unified-top-card__company-name a',
-        '.jobs-unified-top-card__company-name',
-        '.topcard__org-name-link',
-        '.top-card-layout__company a',
-      ].join(', '),
-      (el: Element) => el.textContent?.trim() ?? '',
-    ).catch(() => '');
-
-    const location = await page.$eval(
-      [
-        '.job-details-jobs-unified-top-card__bullet',
-        '.jobs-unified-top-card__bullet',
-        '.topcard__flavor--bullet',
-      ].join(', '),
-      (el: Element) => el.textContent?.trim() ?? '',
-    ).catch(() => '');
-
-    const description = await page.$eval(
-      [
-        '#job-details',
-        '.jobs-description__content',
-        '.jobs-description-content',
-        '.description__text',
-        '.show-more-less-html__markup',
-      ].join(', '),
-      (el: Element) => el.textContent?.trim() ?? '',
-    ).catch(() => '');
+    const pageTitle = await page.title();
+    const parts = pageTitle
+      .split(' | ')
+      .map((p) => p.trim())
+      .filter((p) => p && p !== 'LinkedIn');
+    const title = parts[0] ?? '';
+    const company = parts[1] ?? '';
 
     if (!title || !company) return null;
+    if (title === 'Jobs' || title.toLowerCase().includes('unable to load')) return null;
+
+    let description = await page
+      .$eval(
+        [
+          '#job-details',
+          '.jobs-description__content',
+          '.jobs-description-content',
+          '[class*="jobs-description"]',
+          '.description__text',
+          '.show-more-less-html__markup',
+        ].join(', '),
+        (el: Element) => el.textContent?.trim() ?? '',
+      )
+      .catch(() => '');
+
+    if (description.length < 200) {
+      const body = await page.evaluate(() => document.body.innerText ?? '').catch(() => '');
+      const learningIdx = body.indexOf('Learning');
+      description = (learningIdx >= 0 ? body.slice(learningIdx + 'Learning'.length) : body).trim();
+    }
+
+    const location = await page
+      .$eval(
+        [
+          '.job-details-jobs-unified-top-card__primary-description-container',
+          '.jobs-unified-top-card__primary-description',
+          '.jobs-unified-top-card__bullet',
+          '.topcard__flavor-row',
+          '.topcard__flavor--bullet',
+        ].join(', '),
+        (el: Element) => el.textContent?.trim() ?? '',
+      )
+      .catch(() => '');
 
     const isRemote = [title, location, description].join(' ').toLowerCase().includes('remote');
 
@@ -136,11 +147,9 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     const lock = await client.getMailboxLock('INBOX');
 
     try {
-      // Search for LinkedIn job alert emails from last 7 days
       const since = new Date();
-      since.setDate(since.getDate() - 7);
+      since.setHours(0, 0, 0, 0);
 
-      // Search for all emails from last 7 days, then filter for LinkedIn job content
       const uids = await client.search({ since });
       console.log(`  Found ${uids.length} emails since ${since.toLocaleDateString()}`);
 
@@ -159,7 +168,9 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
 
           linkedinCount++;
           emailCount++;
-          console.log(`  Email ${emailCount}: "${parsed.subject?.slice(0, 60)}" → ${urls.length} job links`);
+          console.log(
+            `  Email ${emailCount}: "${parsed.subject?.slice(0, 60)}" → ${urls.length} job links`,
+          );
 
           for (const url of urls) {
             if (!seenUrls.has(url)) {
@@ -210,7 +221,8 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
   });
 
   const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     viewport: { width: 1440, height: 900 },
   });
 
@@ -225,7 +237,9 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
       const cookies = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
       await context.addCookies(cookies);
       console.log('  Loaded LinkedIn session');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const jobs: JobListing[] = [];
@@ -236,7 +250,9 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     const batch = allUrls.slice(i, i + PARALLEL);
     const batchNum = Math.floor(i / PARALLEL) + 1;
     const totalBatches = Math.ceil(allUrls.length / PARALLEL);
-    console.log(`  Batch ${batchNum}/${totalBatches}: scraping ${batch.length} jobs in parallel...`);
+    console.log(
+      `  Batch ${batchNum}/${totalBatches}: scraping ${batch.length} jobs in parallel...`,
+    );
 
     const results = await Promise.all(
       batch.map(async (url) => {

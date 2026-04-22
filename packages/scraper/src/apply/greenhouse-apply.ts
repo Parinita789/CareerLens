@@ -47,39 +47,47 @@ async function getFieldLabel(element: any, page: Page): Promise<string> {
   }
 
   // 3. Walk up to the field wrapper and find a nearby label (handles Greenhouse custom questions)
-  const wrapperLabel = await element.evaluate((el: HTMLElement) => {
-    let node: Element | null = el;
-    for (let i = 0; i < 8 && node; i++) {
-      node = node.parentElement;
-      if (!node) break;
-      // Check wrapper-specific classes
-      const classList = (node.className && typeof node.className === 'string') ? node.className : '';
-      if (/field|Field|question|Question/.test(classList) || node.tagName === 'FIELDSET') {
-        // Find label inside the wrapper that isn't inside an input wrapper
-        const legend = node.querySelector('legend');
-        if (legend) {
-          const txt = (legend.textContent || '').replace(/\*/g, '').trim();
-          if (txt) return txt;
-        }
-        const labels = node.querySelectorAll('label');
-        for (const label of Array.from(labels)) {
-          if ((label as HTMLElement).contains(el)) continue; // skip self-containing labels
-          const clone = label.cloneNode(true) as HTMLElement;
-          clone.querySelectorAll('span, abbr, small, svg, button, input, textarea, select').forEach((n) => n.remove());
-          const txt = clone.textContent?.replace(/\*/g, '').trim() || '';
-          if (txt && txt.length < 300) return txt;
-        }
-        // Check if the wrapper itself has a direct text child (question text)
-        for (const child of Array.from(node.children)) {
-          if (/label|heading|title/i.test(child.className || '') || /^H[1-6]$/.test(child.tagName)) {
-            const txt = (child.textContent || '').replace(/\*/g, '').trim();
+  const wrapperLabel = await element
+    .evaluate((el: HTMLElement) => {
+      let node: Element | null = el;
+      for (let i = 0; i < 8 && node; i++) {
+        node = node.parentElement;
+        if (!node) break;
+        // Check wrapper-specific classes
+        const classList =
+          node.className && typeof node.className === 'string' ? node.className : '';
+        if (/field|Field|question|Question/.test(classList) || node.tagName === 'FIELDSET') {
+          // Find label inside the wrapper that isn't inside an input wrapper
+          const legend = node.querySelector('legend');
+          if (legend) {
+            const txt = (legend.textContent || '').replace(/\*/g, '').trim();
+            if (txt) return txt;
+          }
+          const labels = node.querySelectorAll('label');
+          for (const label of Array.from(labels)) {
+            if ((label as HTMLElement).contains(el)) continue; // skip self-containing labels
+            const clone = label.cloneNode(true) as HTMLElement;
+            clone
+              .querySelectorAll('span, abbr, small, svg, button, input, textarea, select')
+              .forEach((n) => n.remove());
+            const txt = clone.textContent?.replace(/\*/g, '').trim() || '';
             if (txt && txt.length < 300) return txt;
+          }
+          // Check if the wrapper itself has a direct text child (question text)
+          for (const child of Array.from(node.children)) {
+            if (
+              /label|heading|title/i.test(child.className || '') ||
+              /^H[1-6]$/.test(child.tagName)
+            ) {
+              const txt = (child.textContent || '').replace(/\*/g, '').trim();
+              if (txt && txt.length < 300) return txt;
+            }
           }
         }
       }
-    }
-    return '';
-  }).catch(() => '');
+      return '';
+    })
+    .catch(() => '');
   if (wrapperLabel) return wrapperLabel;
 
   // 4. Fall back to id as readable label (skipping generic question IDs)
@@ -735,7 +743,8 @@ function getDirectAnswer(
   if (labelLower.includes('race') || labelLower.includes('ethnicity')) return 'Asian';
   if (labelLower.includes('veteran')) return 'No';
   if (labelLower.includes('disability') || labelLower.includes('handicap')) return 'No';
-  if (labelLower.includes('lgbtq') || labelLower.includes('sexual orientation')) return 'Heterosexual';
+  if (labelLower.includes('lgbtq') || labelLower.includes('sexual orientation'))
+    return 'Heterosexual';
   if (labelLower.includes('pronoun')) return 'She/Her';
 
   // ── Generic yes/no — only for dropdowns, not text inputs ──
@@ -835,27 +844,43 @@ export function smartMatchOption(answer: string, options: string[], label: strin
 
   // Gender: "Female" ↔ "Woman", "Male" ↔ "Man"
   if (a === 'female' || a === 'woman') {
-    return options.find((o) => o.toLowerCase().includes('female') || o.toLowerCase().includes('woman')) || null;
+    return (
+      options.find(
+        (o) => o.toLowerCase().includes('female') || o.toLowerCase().includes('woman'),
+      ) || null
+    );
   }
   if (a === 'male' || a === 'man') {
-    return options.find((o) =>
-      (o.toLowerCase().includes('male') && !o.toLowerCase().includes('female')) || o.toLowerCase().includes('man')
-    ) || null;
+    return (
+      options.find(
+        (o) =>
+          (o.toLowerCase().includes('male') && !o.toLowerCase().includes('female')) ||
+          o.toLowerCase().includes('man'),
+      ) || null
+    );
   }
 
   // Gender identity: "Cisgender" ↔ "Straight" (for "I identify as" questions)
   if (a === 'cisgender' || a === 'straight' || a === 'heterosexual') {
-    return options.find((o) => o.toLowerCase().includes('cisgender')) ||
-           options.find((o) => o.toLowerCase().includes('heterosexual')) ||
-           options.find((o) => o.toLowerCase().includes('straight')) || null;
+    return (
+      options.find((o) => o.toLowerCase().includes('cisgender')) ||
+      options.find((o) => o.toLowerCase().includes('heterosexual')) ||
+      options.find((o) => o.toLowerCase().includes('straight')) ||
+      null
+    );
   }
 
   // Race/Ethnicity patterns
   if (a === 'south asian' || a === 'asian') {
     // Prefer specific "South Asian" if available, then exact "Asian", then any "asian"
-    return options.find((o) => o.toLowerCase().includes('south asian')) ||
-           options.find((o) => o.toLowerCase().trim() === 'asian' || o.toLowerCase().startsWith('asian')) ||
-           options.find((o) => o.toLowerCase().includes('asian')) || null;
+    return (
+      options.find((o) => o.toLowerCase().includes('south asian')) ||
+      options.find(
+        (o) => o.toLowerCase().trim() === 'asian' || o.toLowerCase().startsWith('asian'),
+      ) ||
+      options.find((o) => o.toLowerCase().includes('asian')) ||
+      null
+    );
   }
   if (a === 'white' || a === 'caucasian') {
     return (
@@ -886,8 +911,11 @@ export function smartMatchOption(answer: string, options: string[], label: strin
 
   // Sexual orientation: "Heterosexual" ↔ "Straight"
   if (a === 'heterosexual' || a === 'straight') {
-    return options.find((o) => o.toLowerCase().includes('heterosexual')) ||
-           options.find((o) => o.toLowerCase().includes('straight')) || null;
+    return (
+      options.find((o) => o.toLowerCase().includes('heterosexual')) ||
+      options.find((o) => o.toLowerCase().includes('straight')) ||
+      null
+    );
   }
 
   // Veteran: "No" → "I am not a protected veteran", "No"
@@ -934,272 +962,329 @@ export function smartMatchOption(answer: string, options: string[], label: strin
 }
 
 async function fillAshbyForm(
-  page: Page, job: ScoredJob, profile: any,
+  page: Page,
+  job: ScoredJob,
+  profile: any,
   getPreScrapedAnswer: (fieldId: string, label: string) => string | null,
 ): Promise<void> {
   console.log('  Filling Ashby form...');
   console.log('  [Ashby] Section 1: resume upload');
   // 1. Upload resume FIRST (Ashby re-renders form after upload)
   try {
-  const resumeInput = await page.$('input[type="file"][id="_systemfield_resume"]');
-  if (resumeInput) {
-    const resumeDir = path.join(__dirname, '../../data/resume');
-    try {
-      const fsModule = await import('fs');
-      const files = fsModule.readdirSync(resumeDir).filter((f: string) => f.toLowerCase().endsWith('.pdf'));
-      if (files.length > 0) {
-        const resumePath = path.join(resumeDir, files[0]);
-        const [fileChooser] = await Promise.all([
-          page.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null),
-          resumeInput.evaluate((el) => (el as HTMLElement).click()),
-        ]);
-        if (fileChooser) {
-          await fileChooser.setFiles(resumePath);
-        } else {
-          await resumeInput.setInputFiles(resumePath);
+    const resumeInput = await page.$('input[type="file"][id="_systemfield_resume"]');
+    if (resumeInput) {
+      const resumeDir = path.join(__dirname, '../../data/resume');
+      try {
+        const fsModule = await import('fs');
+        const files = fsModule
+          .readdirSync(resumeDir)
+          .filter((f: string) => f.toLowerCase().endsWith('.pdf'));
+        if (files.length > 0) {
+          const resumePath = path.join(resumeDir, files[0]);
+          const [fileChooser] = await Promise.all([
+            page.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null),
+            resumeInput.evaluate((el) => (el as HTMLElement).click()),
+          ]);
+          if (fileChooser) {
+            await fileChooser.setFiles(resumePath);
+          } else {
+            await resumeInput.setInputFiles(resumePath);
+          }
+          console.log(`    ✓ Uploaded resume: ${files[0]}`);
+          await sleep(2000);
         }
-        console.log(`    ✓ Uploaded resume: ${files[0]}`);
-        await sleep(2000);
+      } catch {
+        /* skip */
       }
-    } catch { /* skip */ }
+    }
+  } catch (err) {
+    console.log(`  [Ashby] 1 resume error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 1 resume error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 1b: cover letter');
   try {
-  // 1b. Upload cover letter if the field exists
-  const clInput = await page.$('input[type="file"][id="cover_letter"], input[type="file"][id*="cover"]');
-  if (clInput) {
-    try {
-      const { CoverLetterModel } = await import('../db');
-      const { ApplicationFieldsModel } = await import('@job-agent/shared');
-      let coverLetter = '';
-      const preFilled = await ApplicationFieldsModel.findOne({ externalJobId: job.id }).lean().catch(() => null) as any;
-      if (preFilled?.coverLetter) coverLetter = preFilled.coverLetter;
-      if (!coverLetter) {
-        const clDoc = await CoverLetterModel.findOne({ externalJobId: job.id }).sort({ generatedAt: -1 }).lean().catch(() => null);
-        if ((clDoc as any)?.content) coverLetter = (clDoc as any).content;
-      }
-      if (!coverLetter) {
-        const { generateCoverLetter } = await import('../cover-letter/cover-letter');
-        coverLetter = await generateCoverLetter(job);
-        const { saveCoverLetter } = await import('../db');
-        await saveCoverLetter(job.id, coverLetter);
-      }
-      if (coverLetter) {
-        const fsModule = await import('fs');
-        const tempDir = path.join(__dirname, '../../data/cover-letters');
-        fsModule.mkdirSync(tempDir, { recursive: true });
-        // Use .pdf extension — Ashby accepts PDF and the upload handler processes it
-        const filename = `${job.company.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-cover-letter.pdf`;
-        const filepath = path.join(tempDir, filename);
-        fsModule.writeFileSync(filepath, coverLetter);
-        // Click the Upload File button in the Cover Letter section
-        const clLabel = page.locator('label:has-text("Cover Letter")');
-        const clSection = clLabel.locator('..');
-        const uploadBtn = clSection.locator('text=Upload File');
-        if (await uploadBtn.count() > 0) {
-          const [fileChooser] = await Promise.all([
-            page.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null),
-            uploadBtn.first().click(),
-          ]);
-          if (fileChooser) {
-            await fileChooser.setFiles(filepath);
-            console.log(`    ✓ Uploaded cover letter (${coverLetter.length} chars)`);
-            await sleep(2000);
-          }
-        } else {
-          // Fallback: setInputFiles on the hidden input
-          await clInput.setInputFiles(filepath);
-          console.log(`    ✓ Cover letter set via input (${coverLetter.length} chars)`);
-          await sleep(1000);
+    // 1b. Upload cover letter if the field exists
+    const clInput = await page.$(
+      'input[type="file"][id="cover_letter"], input[type="file"][id*="cover"]',
+    );
+    if (clInput) {
+      try {
+        const { CoverLetterModel } = await import('../db');
+        const { ApplicationFieldsModel } = await import('@job-agent/shared');
+        let coverLetter = '';
+        const preFilled = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
+          .lean()
+          .catch(() => null)) as any;
+        if (preFilled?.coverLetter) coverLetter = preFilled.coverLetter;
+        if (!coverLetter) {
+          const clDoc = await CoverLetterModel.findOne({ externalJobId: job.id })
+            .sort({ generatedAt: -1 })
+            .lean()
+            .catch(() => null);
+          if ((clDoc as any)?.content) coverLetter = (clDoc as any).content;
         }
+        if (!coverLetter) {
+          const { generateCoverLetter } = await import('../cover-letter/cover-letter');
+          coverLetter = await generateCoverLetter(job);
+          const { saveCoverLetter } = await import('../db');
+          await saveCoverLetter(job.id, coverLetter);
+        }
+        if (coverLetter) {
+          const fsModule = await import('fs');
+          const tempDir = path.join(__dirname, '../../data/cover-letters');
+          fsModule.mkdirSync(tempDir, { recursive: true });
+          // Use .pdf extension — Ashby accepts PDF and the upload handler processes it
+          const filename = `${job.company.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-cover-letter.pdf`;
+          const filepath = path.join(tempDir, filename);
+          fsModule.writeFileSync(filepath, coverLetter);
+          // Click the Upload File button in the Cover Letter section
+          const clLabel = page.locator('label:has-text("Cover Letter")');
+          const clSection = clLabel.locator('..');
+          const uploadBtn = clSection.locator('text=Upload File');
+          if ((await uploadBtn.count()) > 0) {
+            const [fileChooser] = await Promise.all([
+              page.waitForEvent('filechooser', { timeout: 5000 }).catch(() => null),
+              uploadBtn.first().click(),
+            ]);
+            if (fileChooser) {
+              await fileChooser.setFiles(filepath);
+              console.log(`    ✓ Uploaded cover letter (${coverLetter.length} chars)`);
+              await sleep(2000);
+            }
+          } else {
+            // Fallback: setInputFiles on the hidden input
+            await clInput.setInputFiles(filepath);
+            console.log(`    ✓ Cover letter set via input (${coverLetter.length} chars)`);
+            await sleep(1000);
+          }
+        }
+      } catch (err) {
+        console.log(`    ○ Cover letter failed: ${(err as Error).message.slice(0, 50)}`);
       }
-    } catch (err) {
-      console.log(`    ○ Cover letter failed: ${(err as Error).message.slice(0, 50)}`);
     }
+  } catch (err) {
+    console.log(`  [Ashby] 1b cover letter error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 1b cover letter error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 2: text inputs');
   // 2. Fill all text/email/tel inputs
   try {
-  const allInputs = await page.$$('input[type="text"], input[type="email"], input[type="tel"], input[type="url"]');
-  for (const inp of allInputs) {
-    try {
-    const isHidden = await inp.isHidden().catch(() => true);
-    if (isHidden) continue;
+    const allInputs = await page.$$(
+      'input[type="text"], input[type="email"], input[type="tel"], input[type="url"]',
+    );
+    for (const inp of allInputs) {
+      try {
+        const isHidden = await inp.isHidden().catch(() => true);
+        if (isHidden) continue;
 
-    const id = await inp.getAttribute('id').catch(() => '') || '';
-    const inputType = await inp.getAttribute('type').catch(() => '') || '';
-    const placeholder = (await inp.getAttribute('placeholder').catch(() => '') || '').toLowerCase();
-    const label = await inp.evaluate((el) => {
-      const wrapper = el.closest('[class*="field"], [class*="Field"]');
-      const labelEl = wrapper?.querySelector('label');
-      return labelEl?.textContent?.trim() || '';
-    }).catch(() => '');
-    const hint = (placeholder + ' ' + label).toLowerCase();
+        const id = (await inp.getAttribute('id').catch(() => '')) || '';
+        const inputType = (await inp.getAttribute('type').catch(() => '')) || '';
+        const placeholder = (
+          (await inp.getAttribute('placeholder').catch(() => '')) || ''
+        ).toLowerCase();
+        const label = await inp
+          .evaluate((el) => {
+            const wrapper = el.closest('[class*="field"], [class*="Field"]');
+            const labelEl = wrapper?.querySelector('label');
+            return labelEl?.textContent?.trim() || '';
+          })
+          .catch(() => '');
+        const hint = (placeholder + ' ' + label).toLowerCase();
 
-    const existing = await inp.inputValue().catch(() => '');
-    if (existing) continue;
+        const existing = await inp.inputValue().catch(() => '');
+        if (existing) continue;
 
-    let value = '';
-    if (id === '_systemfield_name') value = profile?.personal?.name || '';
-    else if (id === '_systemfield_email') value = profile?.personal?.email || '';
-    else if (inputType === 'tel' || hint.includes('phone')) value = profile?.personal?.phone || '';
-    else if (hint.includes('linkedin')) value = profile?.personal?.linkedin || '';
-    else if (hint.includes('github')) value = profile?.personal?.github || '';
-    else if (hint.includes('website') || hint.includes('portfolio')) value = '';
-    else if (hint.includes('location') || hint.includes('city') || hint.includes('address') ||
-             hint.includes('where') || hint.includes('work from') || hint.includes('working from') ||
-             hint.includes('payroll'))
-      value = (profile?.preferences?.location?.current_city || profile?.personal?.location || '').replace(/, USA$/, '');
-    else {
-      // Try pre-scraped or rules
-      const preAnswer = getPreScrapedAnswer(id, label || placeholder);
-      if (preAnswer) value = preAnswer;
-      if (!value) {
-        const directAnswer = getDirectAnswer(id, label || placeholder, profile);
-        if (directAnswer) value = directAnswer;
+        let value = '';
+        if (id === '_systemfield_name') value = profile?.personal?.name || '';
+        else if (id === '_systemfield_email') value = profile?.personal?.email || '';
+        else if (inputType === 'tel' || hint.includes('phone'))
+          value = profile?.personal?.phone || '';
+        else if (hint.includes('linkedin')) value = profile?.personal?.linkedin || '';
+        else if (hint.includes('github')) value = profile?.personal?.github || '';
+        else if (hint.includes('website') || hint.includes('portfolio')) value = '';
+        else if (
+          hint.includes('location') ||
+          hint.includes('city') ||
+          hint.includes('address') ||
+          hint.includes('where') ||
+          hint.includes('work from') ||
+          hint.includes('working from') ||
+          hint.includes('payroll')
+        )
+          value = (
+            profile?.preferences?.location?.current_city ||
+            profile?.personal?.location ||
+            ''
+          ).replace(/, USA$/, '');
+        else {
+          // Try pre-scraped or rules
+          const preAnswer = getPreScrapedAnswer(id, label || placeholder);
+          if (preAnswer) value = preAnswer;
+          if (!value) {
+            const directAnswer = getDirectAnswer(id, label || placeholder, profile);
+            if (directAnswer) value = directAnswer;
+          }
+        }
+
+        if (value) {
+          await inp.scrollIntoViewIfNeeded().catch(() => {});
+          await inp.click({ timeout: 3000 }).catch(async () => {
+            await inp.focus().catch(() => {});
+          });
+          await inp.fill('').catch(() => {});
+          await inp.type(value, { delay: 5 }).catch(async () => {
+            await inp.fill(value).catch(() => {});
+          });
+          await sleep(100);
+          console.log(`    ✓ Filled: "${label || id}" = "${value.slice(0, 40)}"`);
+        }
+      } catch (err) {
+        console.log(`    ○ Text input error: ${(err as Error).message.slice(0, 60)}`);
       }
     }
-
-    if (value) {
-      await inp.scrollIntoViewIfNeeded().catch(() => {});
-      await inp.click({ timeout: 3000 }).catch(async () => {
-        await inp.focus().catch(() => {});
-      });
-      await inp.fill('').catch(() => {});
-      await inp.type(value, { delay: 5 }).catch(async () => {
-        await inp.fill(value).catch(() => {});
-      });
-      await sleep(100);
-      console.log(`    ✓ Filled: "${label || id}" = "${value.slice(0, 40)}"`);
-    }
-    } catch (err) {
-      console.log(`    ○ Text input error: ${(err as Error).message.slice(0, 60)}`);
-    }
+  } catch (err) {
+    console.log(`  [Ashby] 2 text input error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 2 text input error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 2b: native selects');
   // 2b. Handle native <select> dropdowns
   try {
-  const selects = await page.$$('select');
-  for (const sel of selects) {
-    const isHidden = await sel.isHidden().catch(() => true);
-    if (isHidden) continue;
-    const currentVal = await sel.$eval('option:checked', (o: Element) => (o as HTMLOptionElement).value).catch(() => '');
-    if (currentVal) continue;
+    const selects = await page.$$('select');
+    for (const sel of selects) {
+      const isHidden = await sel.isHidden().catch(() => true);
+      if (isHidden) continue;
+      const currentVal = await sel
+        .$eval('option:checked', (o: Element) => (o as HTMLOptionElement).value)
+        .catch(() => '');
+      if (currentVal) continue;
 
-    const label = await sel.evaluate((el) => {
-      const wrapper = el.closest('[class*="field"], [class*="Field"]');
-      const labelEl = wrapper?.querySelector('label');
-      return labelEl?.textContent?.trim() || '';
-    }).catch(() => '');
-    if (!label) continue;
+      const label = await sel
+        .evaluate((el) => {
+          const wrapper = el.closest('[class*="field"], [class*="Field"]');
+          const labelEl = wrapper?.querySelector('label');
+          return labelEl?.textContent?.trim() || '';
+        })
+        .catch(() => '');
+      if (!label) continue;
 
-    const options = await sel.$$eval('option:not([value=""])', (opts: Element[]) =>
-      opts.map((o) => (o as HTMLOptionElement).text.trim()),
-    );
+      const options = await sel.$$eval('option:not([value=""])', (opts: Element[]) =>
+        opts.map((o) => (o as HTMLOptionElement).text.trim()),
+      );
 
-    // Get answer from profile
-    const answer = getDirectAnswer('', label, profile, 'select');
-    if (answer) {
-      const matched = smartMatchOption(answer, options, label);
-      if (matched) {
-        await sel.selectOption({ label: matched });
-        console.log(`    ✓ Select: "${label}" → "${matched}"`);
-        continue;
+      // Get answer from profile
+      const answer = getDirectAnswer('', label, profile, 'select');
+      if (answer) {
+        const matched = smartMatchOption(answer, options, label);
+        if (matched) {
+          await sel.selectOption({ label: matched });
+          console.log(`    ✓ Select: "${label}" → "${matched}"`);
+          continue;
+        }
       }
-    }
-    // Try pre-scraped
-    const preAnswer = getPreScrapedAnswer('', label);
-    if (preAnswer) {
-      const matched = smartMatchOption(preAnswer, options, label);
-      if (matched) {
-        await sel.selectOption({ label: matched });
-        console.log(`    ✓ Select (pre-scraped): "${label}" → "${matched}"`);
-        continue;
+      // Try pre-scraped
+      const preAnswer = getPreScrapedAnswer('', label);
+      if (preAnswer) {
+        const matched = smartMatchOption(preAnswer, options, label);
+        if (matched) {
+          await sel.selectOption({ label: matched });
+          console.log(`    ✓ Select (pre-scraped): "${label}" → "${matched}"`);
+          continue;
+        }
       }
+      console.log(`    ○ Select empty: "${label}" [${options.join(', ')}]`);
     }
-    console.log(`    ○ Select empty: "${label}" [${options.join(', ')}]`);
+  } catch (err) {
+    console.log(`  [Ashby] 2b select error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 2b select error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 2c: comboboxes');
   // 2c. Handle combobox/React Select dropdowns
   try {
-  const comboboxes = await page.$$('input[role="combobox"]');
-  for (const combo of comboboxes) {
-    const isHidden = await combo.isHidden().catch(() => true);
-    if (isHidden) continue;
-    const id = await combo.getAttribute('id').catch(() => '') || '';
+    const comboboxes = await page.$$('input[role="combobox"]');
+    for (const combo of comboboxes) {
+      const isHidden = await combo.isHidden().catch(() => true);
+      if (isHidden) continue;
+      const id = (await combo.getAttribute('id').catch(() => '')) || '';
 
-    // Check if already has value
-    const hasValue = await combo.evaluate((el) => {
-      const container = el.closest('[class*="select"]');
-      const sv = container?.querySelector('[class*="singleValue"], [class*="single-value"]');
-      return sv?.textContent?.trim() || '';
-    }).catch(() => '');
-    if (hasValue) continue;
+      // Check if already has value
+      const hasValue = await combo
+        .evaluate((el) => {
+          const container = el.closest('[class*="select"]');
+          const sv = container?.querySelector('[class*="singleValue"], [class*="single-value"]');
+          return sv?.textContent?.trim() || '';
+        })
+        .catch(() => '');
+      if (hasValue) continue;
 
-    const label = await combo.evaluate((el) => {
-      const wrapper = el.closest('[class*="field"], [class*="Field"]');
-      const labelEl = wrapper?.querySelector('label');
-      return labelEl?.textContent?.trim() || '';
-    }).catch(() => '');
-    if (!label) continue;
+      const label = await combo
+        .evaluate((el) => {
+          const wrapper = el.closest('[class*="field"], [class*="Field"]');
+          const labelEl = wrapper?.querySelector('label');
+          return labelEl?.textContent?.trim() || '';
+        })
+        .catch(() => '');
+      if (!label) continue;
 
-    // Get answer
-    let answer = getPreScrapedAnswer(id, label);
-    if (!answer) answer = getDirectAnswer(id, label, profile, 'select');
-    if (!answer) continue;
+      // Get answer
+      let answer = getPreScrapedAnswer(id, label);
+      if (!answer) answer = getDirectAnswer(id, label, profile, 'select');
+      if (!answer) continue;
 
-    console.log(`    Combobox "${label}": answer="${answer}"`);
+      console.log(`    Combobox "${label}": answer="${answer}"`);
 
-    // Type answer to filter, then click match
-    await combo.click({ timeout: 3000 }).catch(() => {});
-    await sleep(300);
-    await combo.fill('');
-    await combo.type(answer, { delay: 5 });
-    await sleep(500);
+      // Type answer to filter, then click match
+      await combo.click({ timeout: 3000 }).catch(() => {});
+      await sleep(300);
+      await combo.fill('');
+      await combo.type(answer, { delay: 5 });
+      await sleep(500);
 
-    // Click matching option from scoped menu
-    const menuId = await combo.getAttribute('aria-controls').catch(() => '') || '';
-    let clicked = false;
-    if (menuId) {
-      const opts = page.locator(`#${menuId} [class*="option"]`);
-      const count = await opts.count().catch(() => 0);
-      for (let i = 0; i < count; i++) {
-        const text = (await opts.nth(i).textContent().catch(() => '') || '').trim();
-        if (text.toLowerCase() === answer.toLowerCase() ||
+      // Click matching option from scoped menu
+      const menuId = (await combo.getAttribute('aria-controls').catch(() => '')) || '';
+      let clicked = false;
+      if (menuId) {
+        const opts = page.locator(`#${menuId} [class*="option"]`);
+        const count = await opts.count().catch(() => 0);
+        for (let i = 0; i < count; i++) {
+          const text = (
+            (await opts
+              .nth(i)
+              .textContent()
+              .catch(() => '')) || ''
+          ).trim();
+          if (
+            text.toLowerCase() === answer.toLowerCase() ||
             text.toLowerCase().includes(answer.toLowerCase()) ||
-            answer.toLowerCase().includes(text.toLowerCase())) {
-          await opts.nth(i).click({ timeout: 3000 });
-          console.log(`    ✓ Combobox: "${label}" → "${text}"`);
-          clicked = true;
-          break;
+            answer.toLowerCase().includes(text.toLowerCase())
+          ) {
+            await opts.nth(i).click({ timeout: 3000 });
+            console.log(`    ✓ Combobox: "${label}" → "${text}"`);
+            clicked = true;
+            break;
+          }
+        }
+      }
+      if (!clicked) {
+        await page.keyboard.press('Enter');
+        await sleep(200);
+        const newVal = await combo
+          .evaluate((el) => {
+            const c = el.closest('[class*="select"]');
+            const v = c?.querySelector('[class*="singleValue"]');
+            return v?.textContent?.trim() || '';
+          })
+          .catch(() => '');
+        if (newVal) {
+          console.log(`    ✓ Combobox: "${label}" → "${newVal}" (Enter)`);
+        } else {
+          await page.keyboard.press('Escape').catch(() => {});
+          console.log(`    ○ Combobox: "${label}" — couldn't select "${answer}"`);
         }
       }
     }
-    if (!clicked) {
-      await page.keyboard.press('Enter');
-      await sleep(200);
-      const newVal = await combo.evaluate((el) => {
-        const c = el.closest('[class*="select"]');
-        const v = c?.querySelector('[class*="singleValue"]');
-        return v?.textContent?.trim() || '';
-      }).catch(() => '');
-      if (newVal) {
-        console.log(`    ✓ Combobox: "${label}" → "${newVal}" (Enter)`);
-      } else {
-        await page.keyboard.press('Escape').catch(() => {});
-        console.log(`    ○ Combobox: "${label}" — couldn't select "${answer}"`);
-      }
-    }
+  } catch (err) {
+    console.log(`  [Ashby] 2c combobox error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 2c combobox error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 2d0: yes/no button groups');
   // 2d0. Handle Ashby custom Yes/No question (rendered as <button> pair, not checkbox/radio)
@@ -1208,251 +1293,322 @@ async function fillAshbyForm(
     for (const container of yesNoContainers) {
       try {
         // Find question label — walk up to the field entry wrapper
-        const label = await container.evaluate((el) => {
-          let node: Element | null = el;
-          for (let i = 0; i < 6 && node; i++) {
-            const wrapperLabel = node.querySelector('label');
-            if (wrapperLabel && !wrapperLabel.contains(el)) {
-              return (wrapperLabel.textContent || '').trim();
+        const label = await container
+          .evaluate((el) => {
+            let node: Element | null = el;
+            for (let i = 0; i < 6 && node; i++) {
+              const wrapperLabel = node.querySelector('label');
+              if (wrapperLabel && !wrapperLabel.contains(el)) {
+                return (wrapperLabel.textContent || '').trim();
+              }
+              node = node.parentElement;
             }
-            node = node.parentElement;
-          }
-          return '';
-        }).catch(() => '');
+            return '';
+          })
+          .catch(() => '');
         if (!label) continue;
 
         // Check if already answered (a button has class containing "selected" / "checked" / aria-pressed)
-        const already = await container.evaluate((el) => {
-          const btns = el.querySelectorAll('button');
-          for (const b of Array.from(btns)) {
-            const cls = (b.className || '');
-            if (/selected|checked|active/i.test(cls)) return true;
-            if (b.getAttribute('aria-pressed') === 'true') return true;
-          }
-          const cb = el.querySelector('input[type="checkbox"]');
-          return !!(cb && (cb as HTMLInputElement).checked);
-        }).catch(() => false);
+        const already = await container
+          .evaluate((el) => {
+            const btns = el.querySelectorAll('button');
+            for (const b of Array.from(btns)) {
+              const cls = b.className || '';
+              if (/selected|checked|active/i.test(cls)) return true;
+              if (b.getAttribute('aria-pressed') === 'true') return true;
+            }
+            const cb = el.querySelector('input[type="checkbox"]');
+            return !!(cb && (cb as HTMLInputElement).checked);
+          })
+          .catch(() => false);
         if (already) continue;
 
         let answer = getPreScrapedAnswer('', label);
         if (!answer) answer = getDirectAnswer('', label, profile, 'select');
         if (!answer) continue;
 
-        const want = answer.toLowerCase().startsWith('y') ? 'Yes' : answer.toLowerCase().startsWith('n') ? 'No' : '';
+        const want = answer.toLowerCase().startsWith('y')
+          ? 'Yes'
+          : answer.toLowerCase().startsWith('n')
+            ? 'No'
+            : '';
         if (!want) continue;
         const btn = await container.$(`button:has-text("${want}")`);
         if (!btn) continue;
         await btn.scrollIntoViewIfNeeded().catch(() => {});
-        const clicked = await btn.click({ timeout: 2000 }).then(() => true).catch(() => false);
+        const clicked = await btn
+          .click({ timeout: 2000 })
+          .then(() => true)
+          .catch(() => false);
         if (!clicked) {
           await btn.evaluate((b) => (b as HTMLButtonElement).click()).catch(() => {});
         }
         console.log(`    ✓ Yes/No: "${label.slice(0, 60)}" → "${want}"`);
         await sleep(200);
-      } catch { /* next container */ }
+      } catch {
+        /* next container */
+      }
     }
-  } catch (err) { console.log(`  [Ashby] 2d0 yes/no error: ${(err as Error).message.slice(0, 80)}`); }
+  } catch (err) {
+    console.log(`  [Ashby] 2d0 yes/no error: ${(err as Error).message.slice(0, 80)}`);
+  }
 
   console.log('  [Ashby] Section 2d: checkboxes');
   // 2d. Handle checkboxes (multi-select questions)
   try {
-  const checkboxGroups = await page.$$('[class*="field"], [class*="Field"]');
-  for (const group of checkboxGroups) {
-    try {
-      const checkboxes = await group.$$('input[type="checkbox"]');
-      if (checkboxes.length === 0) continue;
+    const checkboxGroups = await page.$$('[class*="field"], [class*="Field"]');
+    for (const group of checkboxGroups) {
+      try {
+        const checkboxes = await group.$$('input[type="checkbox"]');
+        if (checkboxes.length === 0) continue;
 
-      const checked = await group.$('input[type="checkbox"]:checked');
-      if (checked) continue;
+        const checked = await group.$('input[type="checkbox"]:checked');
+        if (checked) continue;
 
-      const label = await group.evaluate((el) => {
-        const labelEl = el.querySelector('label');
-        return labelEl?.textContent?.trim() || '';
-      }).catch(() => '');
-      if (!label) continue;
+        const label = await group
+          .evaluate((el) => {
+            const labelEl = el.querySelector('label');
+            return labelEl?.textContent?.trim() || '';
+          })
+          .catch(() => '');
+        if (!label) continue;
 
-      const answer = getDirectAnswer('', label, profile, 'select');
-      if (!answer) continue;
+        const answer = getDirectAnswer('', label, profile, 'select');
+        if (!answer) continue;
 
-      // Click matching checkbox option
-      for (const cb of checkboxes) {
-        try {
-          const cbLabel = await cb.evaluate((el) => {
-            const input = el as HTMLInputElement;
-            // 1. <label for={id}>
-            if (input.id) {
-              const l = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
-              if (l && l.textContent) return l.textContent.trim();
+        // Click matching checkbox option
+        for (const cb of checkboxes) {
+          try {
+            const cbLabel = await cb
+              .evaluate((el) => {
+                const input = el as HTMLInputElement;
+                // 1. <label for={id}>
+                if (input.id) {
+                  const l = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+                  if (l && l.textContent) return l.textContent.trim();
+                }
+                // 2. aria-label on input
+                const aria = input.getAttribute('aria-label');
+                if (aria) return aria.trim();
+                // 3. closest <label>
+                const wrappingLabel = input.closest('label');
+                if (wrappingLabel && wrappingLabel.textContent)
+                  return wrappingLabel.textContent.trim();
+                // 4. immediate next sibling that's a label/span
+                const sib = input.nextElementSibling;
+                if (sib && (sib.tagName === 'LABEL' || sib.tagName === 'SPAN') && sib.textContent) {
+                  return sib.textContent.trim();
+                }
+                // 5. parent's own text (without merging sibling rows)
+                const parent = input.parentElement;
+                if (parent) {
+                  const directText = Array.from(parent.childNodes)
+                    .filter(
+                      (n) =>
+                        n.nodeType === Node.TEXT_NODE ||
+                        (n as Element).tagName === 'SPAN' ||
+                        (n as Element).tagName === 'LABEL',
+                    )
+                    .map((n) => n.textContent || '')
+                    .join(' ')
+                    .trim();
+                  if (directText) return directText;
+                }
+                return '';
+              })
+              .catch(() => '');
+            const a = answer.toLowerCase().trim();
+            const l = cbLabel.toLowerCase().trim();
+            if (!l) continue;
+            // Exact match or answer equals label; avoid "yes" matching "yesno" by requiring word-boundary match
+            const matched =
+              l === a ||
+              (l.length <= 6 && a.length <= 6 && (l.startsWith(a) || a.startsWith(l))) ||
+              new RegExp(`\\b${a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`).test(l);
+            if (!matched) continue;
+            // Click the associated label if the input is hidden (common for custom checkboxes)
+            await cb.scrollIntoViewIfNeeded().catch(() => {});
+            const clicked = await cb
+              .click({ force: true, timeout: 2000 })
+              .then(() => true)
+              .catch(() => false);
+            if (!clicked) {
+              // Fallback: click the parent label wrapper
+              const clickedLabel = await cb
+                .evaluate((el) => {
+                  const lbl = (el as HTMLElement).closest('label');
+                  if (lbl) {
+                    (lbl as HTMLElement).click();
+                    return true;
+                  }
+                  const parent = (el as HTMLElement).parentElement;
+                  if (parent) {
+                    parent.click();
+                    return true;
+                  }
+                  return false;
+                })
+                .catch(() => false);
+              if (!clickedLabel) continue;
             }
-            // 2. aria-label on input
-            const aria = input.getAttribute('aria-label');
-            if (aria) return aria.trim();
-            // 3. closest <label>
-            const wrappingLabel = input.closest('label');
-            if (wrappingLabel && wrappingLabel.textContent) return wrappingLabel.textContent.trim();
-            // 4. immediate next sibling that's a label/span
-            const sib = input.nextElementSibling;
-            if (sib && (sib.tagName === 'LABEL' || sib.tagName === 'SPAN') && sib.textContent) {
-              return sib.textContent.trim();
-            }
-            // 5. parent's own text (without merging sibling rows)
-            const parent = input.parentElement;
-            if (parent) {
-              const directText = Array.from(parent.childNodes)
-                .filter(n => n.nodeType === Node.TEXT_NODE || (n as Element).tagName === 'SPAN' || (n as Element).tagName === 'LABEL')
-                .map(n => n.textContent || '')
-                .join(' ').trim();
-              if (directText) return directText;
-            }
-            return '';
-          }).catch(() => '');
-          const a = answer.toLowerCase().trim();
-          const l = cbLabel.toLowerCase().trim();
-          if (!l) continue;
-          // Exact match or answer equals label; avoid "yes" matching "yesno" by requiring word-boundary match
-          const matched = l === a || (l.length <= 6 && a.length <= 6 && (l.startsWith(a) || a.startsWith(l)))
-            || new RegExp(`\\b${a.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`).test(l);
-          if (!matched) continue;
-          // Click the associated label if the input is hidden (common for custom checkboxes)
-          await cb.scrollIntoViewIfNeeded().catch(() => {});
-          const clicked = await cb.click({ force: true, timeout: 2000 }).then(() => true).catch(() => false);
-          if (!clicked) {
-            // Fallback: click the parent label wrapper
-            const clickedLabel = await cb.evaluate((el) => {
-              const lbl = (el as HTMLElement).closest('label');
-              if (lbl) { (lbl as HTMLElement).click(); return true; }
-              const parent = (el as HTMLElement).parentElement;
-              if (parent) { parent.click(); return true; }
-              return false;
-            }).catch(() => false);
-            if (!clickedLabel) continue;
+            console.log(`    ✓ Checkbox: "${label}" → "${cbLabel}"`);
+          } catch {
+            /* next checkbox */
           }
-          console.log(`    ✓ Checkbox: "${label}" → "${cbLabel}"`);
-        } catch { /* next checkbox */ }
+        }
+      } catch {
+        /* next group */
       }
-    } catch { /* next group */ }
+    }
+  } catch (err) {
+    console.log(`  [Ashby] 2d checkbox error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 2d checkbox error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 3: radios');
   try {
-  // 3. Handle radio groups
-  const radioInputs = await page.$$('input[type="radio"]');
-  if (radioInputs.length > 0) {
-    const radioNames = new Set<string>();
-    for (const r of radioInputs) {
-      const name = await r.getAttribute('name').catch(() => '') || '';
-      if (name) radioNames.add(name);
-    }
-
-    for (const name of radioNames) {
-      const checked = await page.$(`input[type="radio"][name="${name}"]:checked`);
-      if (checked) continue;
-
-      const firstRadio = await page.$(`input[type="radio"][name="${name}"]`);
-      if (!firstRadio) continue;
-      const groupLabel = await firstRadio.evaluate((el) => {
-        // Walk up to find fieldset or field wrapper, get the question label (not option label)
-        let node: Element | null = el;
-        for (let i = 0; i < 10 && node; i++) {
-          node = node.parentElement;
-          if (!node) break;
-          // Check for fieldset legend
-          const legend = node.querySelector('legend');
-          if (legend) return legend.textContent?.trim() || '';
-          // Check for a label that is a DIRECT child (not nested inside options)
-          const labels = node.querySelectorAll(':scope > label');
-          for (const label of Array.from(labels)) {
-            if (!label.querySelector('input')) return label.textContent?.trim() || '';
-          }
-        }
-        return '';
-      }).catch(() => '');
-      if (!groupLabel) continue;
-
-      // Get option texts
-      const allRadios = await page.$$(`input[type="radio"][name="${name}"]`);
-      const optionTexts: string[] = [];
-      for (const radio of allRadios) {
-        const text = await radio.evaluate((el) => {
-          // Ashby: option text is in nextSibling of parent span, or in parent's parent div
-          const parentSpan = el.parentElement;
-          const nextSibling = parentSpan?.nextElementSibling;
-          if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
-          // Try parent div (contains full option text)
-          const optionDiv = parentSpan?.parentElement;
-          if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
-          // Fallback: label or parent
-          const label = el.closest('label');
-          return (label?.textContent || '').trim();
-        }).catch(() => '');
-        if (text) optionTexts.push(text);
+    // 3. Handle radio groups
+    const radioInputs = await page.$$('input[type="radio"]');
+    if (radioInputs.length > 0) {
+      const radioNames = new Set<string>();
+      for (const r of radioInputs) {
+        const name = (await r.getAttribute('name').catch(() => '')) || '';
+        if (name) radioNames.add(name);
       }
 
-      console.log(`    Radio "${groupLabel}": ${optionTexts.join(' | ')}`);
+      for (const name of radioNames) {
+        const checked = await page.$(`input[type="radio"][name="${name}"]:checked`);
+        if (checked) continue;
 
-      // Pick best option
-      const gl = groupLabel.toLowerCase();
-      const hasLocationOptions = optionTexts.some(o =>
-        o.toLowerCase().includes('remote') || o.toLowerCase().includes('hybrid') ||
-        o.toLowerCase().includes('nyc') || o.toLowerCase().includes('office') ||
-        o.toLowerCase().includes('relocat')
-      );
-      let answer = '';
-      if (gl.includes('work') || gl.includes('location') || gl.includes('remote') ||
-          gl.includes('office') || gl.includes('where') || hasLocationOptions) {
-        answer = optionTexts.find(o => o.toLowerCase().includes('remote')) ||
-                 optionTexts.find(o => o.toLowerCase().includes('hybrid')) ||
-                 optionTexts.find(o => o.toLowerCase().includes('relocat')) ||
-                 optionTexts[0] || '';
-      }
+        const firstRadio = await page.$(`input[type="radio"][name="${name}"]`);
+        if (!firstRadio) continue;
+        const groupLabel = await firstRadio
+          .evaluate((el) => {
+            // Walk up to find fieldset or field wrapper, get the question label (not option label)
+            let node: Element | null = el;
+            for (let i = 0; i < 10 && node; i++) {
+              node = node.parentElement;
+              if (!node) break;
+              // Check for fieldset legend
+              const legend = node.querySelector('legend');
+              if (legend) return legend.textContent?.trim() || '';
+              // Check for a label that is a DIRECT child (not nested inside options)
+              const labels = node.querySelectorAll(':scope > label');
+              for (const label of Array.from(labels)) {
+                if (!label.querySelector('input')) return label.textContent?.trim() || '';
+              }
+            }
+            return '';
+          })
+          .catch(() => '');
+        if (!groupLabel) continue;
 
-      if (answer) {
+        // Get option texts
+        const allRadios = await page.$$(`input[type="radio"][name="${name}"]`);
+        const optionTexts: string[] = [];
         for (const radio of allRadios) {
-          const radioText = await radio.evaluate((el) => {
-            const parentSpan = el.parentElement;
-            const nextSibling = parentSpan?.nextElementSibling;
-            if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
-            const optionDiv = parentSpan?.parentElement;
-            if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
-            const label = el.closest('label');
-            return (label?.textContent || '').trim();
-          }).catch(() => '');
-          if (radioText.toLowerCase().includes(answer.toLowerCase()) || answer.toLowerCase().includes(radioText.toLowerCase())) {
-            await radio.click({ force: true });
-            console.log(`    ✓ Radio: "${groupLabel}" → "${radioText}"`);
-            break;
+          const text = await radio
+            .evaluate((el) => {
+              // Ashby: option text is in nextSibling of parent span, or in parent's parent div
+              const parentSpan = el.parentElement;
+              const nextSibling = parentSpan?.nextElementSibling;
+              if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
+              // Try parent div (contains full option text)
+              const optionDiv = parentSpan?.parentElement;
+              if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
+              // Fallback: label or parent
+              const label = el.closest('label');
+              return (label?.textContent || '').trim();
+            })
+            .catch(() => '');
+          if (text) optionTexts.push(text);
+        }
+
+        console.log(`    Radio "${groupLabel}": ${optionTexts.join(' | ')}`);
+
+        // Pick best option
+        const gl = groupLabel.toLowerCase();
+        const hasLocationOptions = optionTexts.some(
+          (o) =>
+            o.toLowerCase().includes('remote') ||
+            o.toLowerCase().includes('hybrid') ||
+            o.toLowerCase().includes('nyc') ||
+            o.toLowerCase().includes('office') ||
+            o.toLowerCase().includes('relocat'),
+        );
+        let answer = '';
+        if (
+          gl.includes('work') ||
+          gl.includes('location') ||
+          gl.includes('remote') ||
+          gl.includes('office') ||
+          gl.includes('where') ||
+          hasLocationOptions
+        ) {
+          answer =
+            optionTexts.find((o) => o.toLowerCase().includes('remote')) ||
+            optionTexts.find((o) => o.toLowerCase().includes('hybrid')) ||
+            optionTexts.find((o) => o.toLowerCase().includes('relocat')) ||
+            optionTexts[0] ||
+            '';
+        }
+
+        if (answer) {
+          for (const radio of allRadios) {
+            const radioText = await radio
+              .evaluate((el) => {
+                const parentSpan = el.parentElement;
+                const nextSibling = parentSpan?.nextElementSibling;
+                if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
+                const optionDiv = parentSpan?.parentElement;
+                if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
+                const label = el.closest('label');
+                return (label?.textContent || '').trim();
+              })
+              .catch(() => '');
+            if (
+              radioText.toLowerCase().includes(answer.toLowerCase()) ||
+              answer.toLowerCase().includes(radioText.toLowerCase())
+            ) {
+              await radio.click({ force: true });
+              console.log(`    ✓ Radio: "${groupLabel}" → "${radioText}"`);
+              break;
+            }
           }
         }
       }
     }
+  } catch (err) {
+    console.log(`  [Ashby] 3 radio error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 3 radio error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  [Ashby] Section 4: textareas');
   try {
-  // 4. Fill textareas
-  const textareas = await page.$$('textarea');
-  for (const ta of textareas) {
-    const isHidden = await ta.isHidden().catch(() => true);
-    if (isHidden) continue;
-    const existing = await ta.inputValue().catch(() => '');
-    if (existing) continue;
-    const label = await ta.evaluate((el) => {
-      const wrapper = el.closest('[class*="field"], [class*="Field"]');
-      const labelEl = wrapper?.querySelector('label');
-      return labelEl?.textContent?.trim() || '';
-    }).catch(() => '');
-    if (!label) continue;
-    // Try pre-scraped or rules
-    const preAnswer = getPreScrapedAnswer('', label);
-    if (preAnswer) {
-      await ta.click({ force: true }).catch(() => {});
-      await ta.fill(preAnswer);
-      console.log(`    ✓ Textarea: "${label}"`);
+    // 4. Fill textareas
+    const textareas = await page.$$('textarea');
+    for (const ta of textareas) {
+      const isHidden = await ta.isHidden().catch(() => true);
+      if (isHidden) continue;
+      const existing = await ta.inputValue().catch(() => '');
+      if (existing) continue;
+      const label = await ta
+        .evaluate((el) => {
+          const wrapper = el.closest('[class*="field"], [class*="Field"]');
+          const labelEl = wrapper?.querySelector('label');
+          return labelEl?.textContent?.trim() || '';
+        })
+        .catch(() => '');
+      if (!label) continue;
+      // Try pre-scraped or rules
+      const preAnswer = getPreScrapedAnswer('', label);
+      if (preAnswer) {
+        await ta.click({ force: true }).catch(() => {});
+        await ta.fill(preAnswer);
+        console.log(`    ✓ Textarea: "${label}"`);
+      }
     }
+  } catch (err) {
+    console.log(`  [Ashby] 4 textarea error: ${(err as Error).message.slice(0, 80)}`);
   }
-  } catch (err) { console.log(`  [Ashby] 4 textarea error: ${(err as Error).message.slice(0, 80)}`); }
 
   console.log('  Ashby form fill complete.');
 }
@@ -1473,11 +1629,21 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
     const t = v.trim().toLowerCase();
     if (t.length > 400) return true;
     const markers = [
-      "i can't answer", "i cannot answer", "i don't wish to",
-      "the candidate should", "candidate needs to", "candidate themselves",
-      "i decline to", "i shouldn't guess", "i'm not able to", "i am not able to",
-      "only the candidate", 'inferred from', 'not included in',
-      'sensitive personal', 'this is personal',
+      "i can't answer",
+      'i cannot answer',
+      "i don't wish to",
+      'the candidate should',
+      'candidate needs to',
+      'candidate themselves',
+      'i decline to',
+      "i shouldn't guess",
+      "i'm not able to",
+      'i am not able to',
+      'only the candidate',
+      'inferred from',
+      'not included in',
+      'sensitive personal',
+      'this is personal',
     ];
     return markers.some((m) => t.includes(m));
   }
@@ -1488,7 +1654,10 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
   if (preScraped?.fields) {
     for (const f of preScraped.fields) {
       if (f.value && f.source !== 'unknown') {
-        if (isRefusalText(f.value)) { skippedRefusals++; continue; }
+        if (isRefusalText(f.value)) {
+          skippedRefusals++;
+          continue;
+        }
         if (f.fieldId) preAnswersByFieldId.set(f.fieldId, { value: f.value, source: f.source });
         preAnswersByLabel.set(f.label.toLowerCase().trim(), { value: f.value, source: f.source });
       }
@@ -1551,7 +1720,9 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
   }
 
   // Scroll through entire form to ensure all lazy-loaded fields are in DOM
-  await page.evaluate(`(() => {
+  await page
+    .evaluate(
+      `(() => {
     const scrollStep = async () => {
       const height = document.body.scrollHeight;
       for (let y = 0; y < height; y += 300) {
@@ -1560,7 +1731,9 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
       window.scrollTo(0, height);
     };
     scrollStep();
-  })()`).catch(() => {});
+  })()`,
+    )
+    .catch(() => {});
   await sleep(1000);
   await page.evaluate(`(() => { window.scrollTo(0, 0); })()`).catch(() => {});
   await sleep(300);
@@ -1570,234 +1743,282 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
   for (let pass = 0; pass < 2; pass++) {
     if (pass === 1) {
       // Scroll to bottom again before second pass
-      await page.evaluate(`(() => { window.scrollTo(0, document.body.scrollHeight); })()`).catch(() => {});
+      await page
+        .evaluate(`(() => { window.scrollTo(0, document.body.scrollHeight); })()`)
+        .catch(() => {});
       await sleep(500);
       await page.evaluate(`(() => { window.scrollTo(0, 0); })()`).catch(() => {});
       await sleep(300);
     }
-  try {
-    const comboboxInputs = await page.$$('input[role="combobox"]');
-    if (pass === 0) console.log(`  Found ${comboboxInputs.length} combobox inputs`);
-    for (const combo of comboboxInputs) {
-      const id = (await combo.getAttribute('id').catch(() => '')) || '';
+    try {
+      const comboboxInputs = await page.$$('input[role="combobox"]');
+      if (pass === 0) console.log(`  Found ${comboboxInputs.length} combobox inputs`);
+      for (const combo of comboboxInputs) {
+        const id = (await combo.getAttribute('id').catch(() => '')) || '';
 
-      // Skip phone country code picker (iti = international telephone input)
-      if (id.includes('iti') || id.includes('search-input') || id.includes('country-listbox')) {
-        filledIds.add(id);
-        continue;
-      }
-
-      // CRITICAL: skip already-filled fields (fixes duplicate filling across passes)
-      if (id && filledIds.has(id)) continue;
-
-      const label = await getFieldLabel(combo, page);
-      if (!label || isSkippableLabel(label)) {
-        continue;
-      }
-      console.log(`    Combobox id="${id}" label="${label.slice(0, 60)}"`);
-
-      // Check if already has a value selected (Greenhouse React Select uses select__control/select-shell)
-      const selectedValue = await combo.evaluate((el) => {
-        const shell = el.closest('[class*="select-shell"], [class*="select__container"], [class*="select__control"]');
-        if (!shell) return '';
-        // Greenhouse marks filled value containers with --has-value modifier
-        const filledContainer = shell.querySelector('[class*="value-container"][class*="has-value"], [class*="value-container--has-value"]');
-        if (filledContainer) {
-          const sv = filledContainer.querySelector('[class*="single-value"], [class*="singleValue"], [class*="multi-value"], [class*="multiValue"]');
-          if (sv) return sv.textContent?.trim() || '';
-          const text = filledContainer.textContent?.trim() || '';
-          if (text) return text;
-        }
-        // Fallback: check for single-value div anywhere in shell
-        const singleValue = shell.querySelector('[class*="single-value"], [class*="singleValue"]');
-        if (singleValue) return singleValue.textContent?.trim() || '';
-        return '';
-      }).catch(() => '');
-
-      if (selectedValue) {
-        console.log(`    Dropdown already set: "${label}" = "${selectedValue}"`);
-        filledIds.add(id);
-        continue;
-      }
-
-      // Resolve answer: pre-scraped → rules → profile (NO LLM)
-      let answer = '';
-      const preAnswer = getPreScrapedAnswer(id, label);
-      if (preAnswer) {
-        answer = preAnswer;
-      }
-      if (!answer) {
-        try {
-          const ruleAnswer = await answerQuestion(label, 'select');
-          if (ruleAnswer && !isRefusalText(ruleAnswer)) answer = ruleAnswer;
-        } catch {
-          /* fall through */
-        }
-      }
-      if (!answer) {
-        const directAnswer = getDirectAnswer(id, label, profile, 'select');
-        if (directAnswer) answer = directAnswer;
-      }
-
-      if (!answer) {
-        console.log(`    ○ Skipped dropdown: "${label}" — no answer available`);
-        continue;
-      }
-
-      console.log(`    Dropdown "${label}": answer="${answer}"`);
-
-      // Select from dropdown using type-to-filter approach (scoped to THIS combobox)
-      try {
-        // Focus and clear the combobox, then type the answer to filter
-        await combo.click({ timeout: 5000 });
-        await sleep(300);
-        await combo.fill('');
-        await combo.type(answer, { delay: 15 });
-        await sleep(500);
-
-        // Find the CLOSEST menu to this combobox (not the phone picker's menu)
-        // Use the combobox's aria-controls or the menu that appeared right after this input
-        const menuId = await combo.getAttribute('aria-controls').catch(() => '') || '';
-        let clicked = false;
-
-        // Detects the React-Select "no matches" placeholder so we don't click it.
-        const isPlaceholder = (t: string) =>
-          /^(no options?|no results?|nothing found|loading)/i.test((t || '').trim());
-
-        const tryScopedMatch = async (id: string): Promise<{ clicked: boolean; count: number }> => {
-          const scoped = page.locator(`#${id} [class*="option"], #${id} [role="option"]`);
-          const cnt = await scoped.count().catch(() => 0);
-          const texts: string[] = [];
-          for (let i = 0; i < cnt; i++) {
-            const t = (await scoped.nth(i).textContent().catch(() => '') || '').trim();
-            texts.push(t);
-          }
-          const realCount = texts.filter((t) => t && !isPlaceholder(t)).length;
-          console.log(`    Scoped menu #${id}: ${cnt} options (${realCount} real)`);
-          // Pass 1: smart match by alias/semantics
-          const smart = smartMatchOption(answer, texts.filter((t) => !isPlaceholder(t)), label);
-          if (smart) {
-            const idx = texts.indexOf(smart);
-            if (idx >= 0) {
-              await scoped.nth(idx).click({ timeout: 3000 });
-              console.log(`    ✓ Dropdown: "${label}" → "${smart}" (scoped/smart)`);
-              return { clicked: true, count: realCount };
-            }
-          }
-          // Pass 2: substring match (ignoring placeholders)
-          for (let i = 0; i < cnt; i++) {
-            const text = texts[i];
-            if (!text || isPlaceholder(text)) continue;
-            if (text.toLowerCase() === answer.toLowerCase() ||
-                text.toLowerCase().includes(answer.toLowerCase()) ||
-                answer.toLowerCase().includes(text.toLowerCase())) {
-              await scoped.nth(i).click({ timeout: 3000 });
-              console.log(`    ✓ Dropdown: "${label}" → "${text}" (scoped)`);
-              return { clicked: true, count: realCount };
-            }
-          }
-          // Pass 3: if filter narrowed to a single real option, trust it
-          if (realCount === 1) {
-            const idx = texts.findIndex((t) => t && !isPlaceholder(t));
-            if (idx >= 0 && !/\+\d{1,3}$/.test(texts[idx])) {
-              await scoped.nth(idx).click({ timeout: 3000 });
-              console.log(`    ✓ Dropdown: "${label}" → "${texts[idx]}" (scoped/only-option)`);
-              return { clicked: true, count: realCount };
-            }
-          }
-          return { clicked: false, count: realCount };
-        };
-
-        if (menuId) {
-          let result = await tryScopedMatch(menuId);
-          clicked = result.clicked;
-          // If the filter hid all options (0 real), clear filter and retry with full list
-          if (!clicked && result.count === 0) {
-            // Close menu, clear the input, reopen
-            await page.keyboard.press('Escape').catch(() => {});
-            await sleep(200);
-            await combo.click({ timeout: 2000 }).catch(() => {});
-            await sleep(200);
-            // Clear any lingering filter via keyboard (React Select can be finicky with fill())
-            await combo.press('Control+A').catch(() => {});
-            await combo.press('Delete').catch(() => {});
-            await sleep(400);
-            result = await tryScopedMatch(menuId);
-            clicked = result.clicked;
-          }
-        }
-
-        // Fallback: use the menu that's nearest sibling to this combobox's container
-        if (!clicked) {
-          // The React Select menu is usually rendered as a sibling of the select container
-          const menuLocator = page.locator('[class*="select__menu"]:visible, [class*="menu-list"]:visible').last();
-          const menuVisible = await menuLocator.isVisible().catch(() => false);
-          if (menuVisible) {
-            const opts = menuLocator.locator('[class*="option"], [role="option"]');
-            const count = await opts.count().catch(() => 0);
-            console.log(`    Visible menu: ${count} options`);
-            // Check first option — if it's a phone code, skip
-            if (count > 0) {
-              const firstText = (await opts.first().textContent().catch(() => '') || '').trim();
-              if (/\+\d{1,3}$/.test(firstText)) {
-                console.log(`    ○ Skipped phone code picker: "${label}"`);
-                await page.keyboard.press('Escape').catch(() => {});
-                filledIds.add(id);
-                continue;
-              }
-            }
-            for (let i = 0; i < count; i++) {
-              const text = (await opts.nth(i).textContent().catch(() => '') || '').trim();
-              if (text.toLowerCase() === answer.toLowerCase() ||
-                  text.toLowerCase().includes(answer.toLowerCase()) ||
-                  answer.toLowerCase().includes(text.toLowerCase())) {
-                await opts.nth(i).click({ timeout: 3000 });
-                console.log(`    ✓ Dropdown: "${label}" → "${text}" (visible menu)`);
-                clicked = true;
-                break;
-              }
-            }
-          }
-        }
-
-        // Last resort: just press Enter on the first filtered result
-        if (!clicked) {
-          await page.keyboard.press('Enter');
-          await sleep(200);
-          // Check if a value was selected
-          const newVal = await combo.evaluate((el) => {
-            const container = el.closest('[class*="select"]');
-            const val = container?.querySelector('[class*="singleValue"], [class*="single-value"]');
-            return val?.textContent?.trim() || '';
-          }).catch(() => '');
-          if (newVal) {
-            console.log(`    ✓ Dropdown: "${label}" → "${newVal}" (Enter key)`);
-            clicked = true;
-          }
-        }
-
-        if (clicked) {
+        // Skip phone country code picker (iti = international telephone input)
+        if (id.includes('iti') || id.includes('search-input') || id.includes('country-listbox')) {
           filledIds.add(id);
-        } else {
-          await page.keyboard.press('Escape').catch(() => {});
-          console.log(`    ○ Dropdown: "${label}" — couldn't select "${answer}", fill manually`);
+          continue;
         }
-      } catch (err) {
-        console.log(`    ○ Dropdown failed: "${label}" — ${(err as Error).message.slice(0, 60)}`);
-        await page.keyboard.press('Escape').catch(() => {});
+
+        // CRITICAL: skip already-filled fields (fixes duplicate filling across passes)
+        if (id && filledIds.has(id)) continue;
+
+        const label = await getFieldLabel(combo, page);
+        if (!label || isSkippableLabel(label)) {
+          continue;
+        }
+        console.log(`    Combobox id="${id}" label="${label.slice(0, 60)}"`);
+
+        // Check if already has a value selected (Greenhouse React Select uses select__control/select-shell)
+        const selectedValue = await combo
+          .evaluate((el) => {
+            const shell = el.closest(
+              '[class*="select-shell"], [class*="select__container"], [class*="select__control"]',
+            );
+            if (!shell) return '';
+            // Greenhouse marks filled value containers with --has-value modifier
+            const filledContainer = shell.querySelector(
+              '[class*="value-container"][class*="has-value"], [class*="value-container--has-value"]',
+            );
+            if (filledContainer) {
+              const sv = filledContainer.querySelector(
+                '[class*="single-value"], [class*="singleValue"], [class*="multi-value"], [class*="multiValue"]',
+              );
+              if (sv) return sv.textContent?.trim() || '';
+              const text = filledContainer.textContent?.trim() || '';
+              if (text) return text;
+            }
+            // Fallback: check for single-value div anywhere in shell
+            const singleValue = shell.querySelector(
+              '[class*="single-value"], [class*="singleValue"]',
+            );
+            if (singleValue) return singleValue.textContent?.trim() || '';
+            return '';
+          })
+          .catch(() => '');
+
+        if (selectedValue) {
+          console.log(`    Dropdown already set: "${label}" = "${selectedValue}"`);
+          filledIds.add(id);
+          continue;
+        }
+
+        // Resolve answer: pre-scraped → rules → profile (NO LLM)
+        let answer = '';
+        const preAnswer = getPreScrapedAnswer(id, label);
+        if (preAnswer) {
+          answer = preAnswer;
+        }
+        if (!answer) {
+          try {
+            const ruleAnswer = await answerQuestion(label, 'select');
+            if (ruleAnswer && !isRefusalText(ruleAnswer)) answer = ruleAnswer;
+          } catch {
+            /* fall through */
+          }
+        }
+        if (!answer) {
+          const directAnswer = getDirectAnswer(id, label, profile, 'select');
+          if (directAnswer) answer = directAnswer;
+        }
+
+        if (!answer) {
+          console.log(`    ○ Skipped dropdown: "${label}" — no answer available`);
+          continue;
+        }
+
+        console.log(`    Dropdown "${label}": answer="${answer}"`);
+
+        // Select from dropdown using type-to-filter approach (scoped to THIS combobox)
+        try {
+          // Focus and clear the combobox, then type the answer to filter
+          await combo.click({ timeout: 5000 });
+          await sleep(300);
+          await combo.fill('');
+          await combo.type(answer, { delay: 15 });
+          await sleep(500);
+
+          // Find the CLOSEST menu to this combobox (not the phone picker's menu)
+          // Use the combobox's aria-controls or the menu that appeared right after this input
+          const menuId = (await combo.getAttribute('aria-controls').catch(() => '')) || '';
+          let clicked = false;
+
+          // Detects the React-Select "no matches" placeholder so we don't click it.
+          const isPlaceholder = (t: string) =>
+            /^(no options?|no results?|nothing found|loading)/i.test((t || '').trim());
+
+          const tryScopedMatch = async (
+            id: string,
+          ): Promise<{ clicked: boolean; count: number }> => {
+            const scoped = page.locator(`#${id} [class*="option"], #${id} [role="option"]`);
+            const cnt = await scoped.count().catch(() => 0);
+            const texts: string[] = [];
+            for (let i = 0; i < cnt; i++) {
+              const t = (
+                (await scoped
+                  .nth(i)
+                  .textContent()
+                  .catch(() => '')) || ''
+              ).trim();
+              texts.push(t);
+            }
+            const realCount = texts.filter((t) => t && !isPlaceholder(t)).length;
+            console.log(`    Scoped menu #${id}: ${cnt} options (${realCount} real)`);
+            // Pass 1: smart match by alias/semantics
+            const smart = smartMatchOption(
+              answer,
+              texts.filter((t) => !isPlaceholder(t)),
+              label,
+            );
+            if (smart) {
+              const idx = texts.indexOf(smart);
+              if (idx >= 0) {
+                await scoped.nth(idx).click({ timeout: 3000 });
+                console.log(`    ✓ Dropdown: "${label}" → "${smart}" (scoped/smart)`);
+                return { clicked: true, count: realCount };
+              }
+            }
+            // Pass 2: substring match (ignoring placeholders)
+            for (let i = 0; i < cnt; i++) {
+              const text = texts[i];
+              if (!text || isPlaceholder(text)) continue;
+              if (
+                text.toLowerCase() === answer.toLowerCase() ||
+                text.toLowerCase().includes(answer.toLowerCase()) ||
+                answer.toLowerCase().includes(text.toLowerCase())
+              ) {
+                await scoped.nth(i).click({ timeout: 3000 });
+                console.log(`    ✓ Dropdown: "${label}" → "${text}" (scoped)`);
+                return { clicked: true, count: realCount };
+              }
+            }
+            // Pass 3: if filter narrowed to a single real option, trust it
+            if (realCount === 1) {
+              const idx = texts.findIndex((t) => t && !isPlaceholder(t));
+              if (idx >= 0 && !/\+\d{1,3}$/.test(texts[idx])) {
+                await scoped.nth(idx).click({ timeout: 3000 });
+                console.log(`    ✓ Dropdown: "${label}" → "${texts[idx]}" (scoped/only-option)`);
+                return { clicked: true, count: realCount };
+              }
+            }
+            return { clicked: false, count: realCount };
+          };
+
+          if (menuId) {
+            let result = await tryScopedMatch(menuId);
+            clicked = result.clicked;
+            // If the filter hid all options (0 real), clear filter and retry with full list
+            if (!clicked && result.count === 0) {
+              // Close menu, clear the input, reopen
+              await page.keyboard.press('Escape').catch(() => {});
+              await sleep(200);
+              await combo.click({ timeout: 2000 }).catch(() => {});
+              await sleep(200);
+              // Clear any lingering filter via keyboard (React Select can be finicky with fill())
+              await combo.press('Control+A').catch(() => {});
+              await combo.press('Delete').catch(() => {});
+              await sleep(400);
+              result = await tryScopedMatch(menuId);
+              clicked = result.clicked;
+            }
+          }
+
+          // Fallback: use the menu that's nearest sibling to this combobox's container
+          if (!clicked) {
+            // The React Select menu is usually rendered as a sibling of the select container
+            const menuLocator = page
+              .locator('[class*="select__menu"]:visible, [class*="menu-list"]:visible')
+              .last();
+            const menuVisible = await menuLocator.isVisible().catch(() => false);
+            if (menuVisible) {
+              const opts = menuLocator.locator('[class*="option"], [role="option"]');
+              const count = await opts.count().catch(() => 0);
+              console.log(`    Visible menu: ${count} options`);
+              // Check first option — if it's a phone code, skip
+              if (count > 0) {
+                const firstText = (
+                  (await opts
+                    .first()
+                    .textContent()
+                    .catch(() => '')) || ''
+                ).trim();
+                if (/\+\d{1,3}$/.test(firstText)) {
+                  console.log(`    ○ Skipped phone code picker: "${label}"`);
+                  await page.keyboard.press('Escape').catch(() => {});
+                  filledIds.add(id);
+                  continue;
+                }
+              }
+              for (let i = 0; i < count; i++) {
+                const text = (
+                  (await opts
+                    .nth(i)
+                    .textContent()
+                    .catch(() => '')) || ''
+                ).trim();
+                if (
+                  text.toLowerCase() === answer.toLowerCase() ||
+                  text.toLowerCase().includes(answer.toLowerCase()) ||
+                  answer.toLowerCase().includes(text.toLowerCase())
+                ) {
+                  await opts.nth(i).click({ timeout: 3000 });
+                  console.log(`    ✓ Dropdown: "${label}" → "${text}" (visible menu)`);
+                  clicked = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          // Last resort: just press Enter on the first filtered result
+          if (!clicked) {
+            await page.keyboard.press('Enter');
+            await sleep(200);
+            // Check if a value was selected
+            const newVal = await combo
+              .evaluate((el) => {
+                const container = el.closest('[class*="select"]');
+                const val = container?.querySelector(
+                  '[class*="singleValue"], [class*="single-value"]',
+                );
+                return val?.textContent?.trim() || '';
+              })
+              .catch(() => '');
+            if (newVal) {
+              console.log(`    ✓ Dropdown: "${label}" → "${newVal}" (Enter key)`);
+              clicked = true;
+            }
+          }
+
+          if (clicked) {
+            filledIds.add(id);
+          } else {
+            await page.keyboard.press('Escape').catch(() => {});
+            console.log(`    ○ Dropdown: "${label}" — couldn't select "${answer}", fill manually`);
+          }
+        } catch (err) {
+          console.log(`    ○ Dropdown failed: "${label}" — ${(err as Error).message.slice(0, 60)}`);
+          await page.keyboard.press('Escape').catch(() => {});
+        }
+        await sleep(100);
       }
-      await sleep(100);
+    } catch (err) {
+      console.log(`  ⚠ Dropdown handler error (continuing): ${(err as Error).message}`);
     }
-  } catch (err) {
-    console.log(`  ⚠ Dropdown handler error (continuing): ${(err as Error).message}`);
-  }
   } // end combobox two-pass loop
 
   // ── Fill any remaining unfilled pre-scraped fields by ID ──
   // Catches comboboxes not found by page.$$('input[role="combobox"]')
   if (preScraped?.fields) {
-    const unfilled = (preScraped.fields as any[]).filter((f: any) =>
-      f.value && f.source !== 'unknown' && f.type === 'combobox' && f.fieldId && !filledIds.has(f.fieldId)
+    const unfilled = (preScraped.fields as any[]).filter(
+      (f: any) =>
+        f.value &&
+        f.source !== 'unknown' &&
+        f.type === 'combobox' &&
+        f.fieldId &&
+        !filledIds.has(f.fieldId),
     );
 
     if (unfilled.length > 0) {
@@ -1813,11 +2034,15 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
           }
 
           // Check if already has a value
-          const hasValue = await el.evaluate((e) => {
-            const container = e.closest('[class*="select"]');
-            const sv = container?.querySelector('[class*="singleValue"], [class*="single-value"]');
-            return sv?.textContent?.trim() || '';
-          }).catch(() => '');
+          const hasValue = await el
+            .evaluate((e) => {
+              const container = e.closest('[class*="select"]');
+              const sv = container?.querySelector(
+                '[class*="singleValue"], [class*="single-value"]',
+              );
+              return sv?.textContent?.trim() || '';
+            })
+            .catch(() => '');
 
           if (hasValue) {
             console.log(`    Already set: "${field.label}" = "${hasValue}"`);
@@ -1832,17 +2057,24 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
           await el.type(field.value, { delay: 15 });
           await sleep(500);
 
-          const menuId = await el.getAttribute('aria-controls').catch(() => '') || '';
+          const menuId = (await el.getAttribute('aria-controls').catch(() => '')) || '';
           let clicked = false;
 
           if (menuId) {
             const opts = page.locator(`#${menuId} [class*="option"]`);
             const count = await opts.count().catch(() => 0);
             for (let i = 0; i < count; i++) {
-              const text = (await opts.nth(i).textContent().catch(() => '') || '').trim();
-              if (text.toLowerCase() === field.value.toLowerCase() ||
-                  text.toLowerCase().includes(field.value.toLowerCase()) ||
-                  field.value.toLowerCase().includes(text.toLowerCase())) {
+              const text = (
+                (await opts
+                  .nth(i)
+                  .textContent()
+                  .catch(() => '')) || ''
+              ).trim();
+              if (
+                text.toLowerCase() === field.value.toLowerCase() ||
+                text.toLowerCase().includes(field.value.toLowerCase()) ||
+                field.value.toLowerCase().includes(text.toLowerCase())
+              ) {
                 await opts.nth(i).click({ timeout: 3000 });
                 console.log(`    ✓ By ID: "${field.label}" → "${text}"`);
                 clicked = true;
@@ -1856,11 +2088,13 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
             // Try pressing Enter on first filtered result
             await page.keyboard.press('Enter');
             await sleep(200);
-            const newVal = await el.evaluate((e) => {
-              const c = e.closest('[class*="select"]');
-              const v = c?.querySelector('[class*="singleValue"]');
-              return v?.textContent?.trim() || '';
-            }).catch(() => '');
+            const newVal = await el
+              .evaluate((e) => {
+                const c = e.closest('[class*="select"]');
+                const v = c?.querySelector('[class*="singleValue"]');
+                return v?.textContent?.trim() || '';
+              })
+              .catch(() => '');
             if (newVal) {
               console.log(`    ✓ By ID: "${field.label}" → "${newVal}" (Enter)`);
               filledIds.add(field.fieldId);
@@ -1870,7 +2104,9 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
             }
           }
         } catch (err) {
-          console.log(`    ○ By ID failed: "${field.label}" — ${(err as Error).message.slice(0, 50)}`);
+          console.log(
+            `    ○ By ID failed: "${field.label}" — ${(err as Error).message.slice(0, 50)}`,
+          );
           await page.keyboard.press('Escape').catch(() => {});
         }
         await sleep(100);
@@ -1881,18 +2117,24 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
   // ── Ashby handled at top of fillFormFields — this block is dead code ──
   if (false) {
     // 1. Upload resume FIRST (Ashby re-renders form after upload)
-    const resumeInput = await page.$('input[type="file"][id="_systemfield_resume"], input[type="file"]');
+    const resumeInput = await page.$(
+      'input[type="file"][id="_systemfield_resume"], input[type="file"]',
+    );
     if (resumeInput) {
       const resumeDir = path.join(__dirname, '../../data/resume');
       try {
         const fs = await import('fs');
-        const files = fs.readdirSync(resumeDir).filter((f: string) => f.toLowerCase().endsWith('.pdf'));
+        const files = fs
+          .readdirSync(resumeDir)
+          .filter((f: string) => f.toLowerCase().endsWith('.pdf'));
         if (files.length > 0) {
           await resumeInput.setInputFiles(path.join(resumeDir, files[0]));
           console.log(`    ✓ Uploaded resume: ${files[0]}`);
           await sleep(2000); // Wait for Ashby to re-render after upload
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     // 1b. Upload cover letter if field exists (re-query after resume upload re-render)
@@ -1907,10 +2149,15 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
         const { ApplicationFieldsModel } = await import('@job-agent/shared');
         let coverLetter = '';
 
-        const preFilled = await ApplicationFieldsModel.findOne({ externalJobId: job.id }).lean().catch(() => null) as any;
+        const preFilled = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
+          .lean()
+          .catch(() => null)) as any;
         if (preFilled?.coverLetter) coverLetter = preFilled.coverLetter;
         if (!coverLetter) {
-          const existing = await CoverLetterModel.findOne({ externalJobId: job.id }).sort({ generatedAt: -1 }).lean().catch(() => null);
+          const existing = await CoverLetterModel.findOne({ externalJobId: job.id })
+            .sort({ generatedAt: -1 })
+            .lean()
+            .catch(() => null);
           if ((existing as any)?.content) coverLetter = (existing as any).content;
         }
         if (!coverLetter) {
@@ -1938,35 +2185,55 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
     }
 
     // 2. Fill text/email/tel inputs AFTER resume upload (avoids re-render clearing values)
-    const allInputs = await page.$$('input[type="text"], input[type="email"], input[type="tel"], input[type="url"]');
+    const allInputs = await page.$$(
+      'input[type="text"], input[type="email"], input[type="tel"], input[type="url"]',
+    );
     for (const inp of allInputs) {
       const isHidden = await inp.isHidden().catch(() => true);
       if (isHidden) continue;
 
-      const id = await inp.getAttribute('id').catch(() => '') || '';
-      const inputType = await inp.getAttribute('type').catch(() => '') || '';
-      const placeholder = (await inp.getAttribute('placeholder').catch(() => '') || '').toLowerCase();
-      const label = await inp.evaluate((el) => {
-        const wrapper = el.closest('[class*="field"], [class*="Field"]');
-        const labelEl = wrapper?.querySelector('label');
-        return labelEl?.textContent?.trim() || '';
-      }).catch(() => '');
+      const id = (await inp.getAttribute('id').catch(() => '')) || '';
+      const inputType = (await inp.getAttribute('type').catch(() => '')) || '';
+      const placeholder = (
+        (await inp.getAttribute('placeholder').catch(() => '')) || ''
+      ).toLowerCase();
+      const label = await inp
+        .evaluate((el) => {
+          const wrapper = el.closest('[class*="field"], [class*="Field"]');
+          const labelEl = wrapper?.querySelector('label');
+          return labelEl?.textContent?.trim() || '';
+        })
+        .catch(() => '');
       const hint = (placeholder + ' ' + label).toLowerCase();
 
       const existing = await inp.inputValue().catch(() => '');
-      if (existing) { filledIds.add(id); continue; }
+      if (existing) {
+        filledIds.add(id);
+        continue;
+      }
 
       let value = '';
       if (id === '_systemfield_name') value = profile?.personal?.name || '';
       else if (id === '_systemfield_email') value = profile?.personal?.email || '';
-      else if (inputType === 'tel' || hint.includes('phone')) value = profile?.personal?.phone || '';
+      else if (inputType === 'tel' || hint.includes('phone'))
+        value = profile?.personal?.phone || '';
       else if (hint.includes('linkedin')) value = profile?.personal?.linkedin || '';
       else if (hint.includes('github')) value = profile?.personal?.github || '';
       else if (hint.includes('website') || hint.includes('portfolio')) value = '';
-      else if (hint.includes('location') || hint.includes('city') || hint.includes('address') ||
-               hint.includes('where') || hint.includes('work from') || hint.includes('working from') ||
-               hint.includes('payroll'))
-        value = (profile?.preferences?.location?.current_city || profile?.personal?.location || '').replace(/, USA$/, '');
+      else if (
+        hint.includes('location') ||
+        hint.includes('city') ||
+        hint.includes('address') ||
+        hint.includes('where') ||
+        hint.includes('work from') ||
+        hint.includes('working from') ||
+        hint.includes('payroll')
+      )
+        value = (
+          profile?.preferences?.location?.current_city ||
+          profile?.personal?.location ||
+          ''
+        ).replace(/, USA$/, '');
 
       if (value) {
         await inp.click();
@@ -1984,7 +2251,7 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
       // Group by name attribute
       const radioNames = new Set<string>();
       for (const r of radioInputs) {
-        const name = await r.getAttribute('name').catch(() => '') || '';
+        const name = (await r.getAttribute('name').catch(() => '')) || '';
         if (name) radioNames.add(name);
       }
 
@@ -1996,52 +2263,70 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
         // Get the group label by finding the wrapper
         const firstRadio = await page.$(`input[type="radio"][name="${name}"]`);
         if (!firstRadio) continue;
-        const groupLabel = await firstRadio.evaluate((el) => {
-          // Walk up to find the field wrapper with the question label
-          let node = el.parentElement;
-          for (let i = 0; i < 10 && node; i++) {
-            const label = node.querySelector('label');
-            if (label && !label.querySelector('input')) {
-              return label.textContent?.trim() || '';
+        const groupLabel = await firstRadio
+          .evaluate((el) => {
+            // Walk up to find the field wrapper with the question label
+            let node = el.parentElement;
+            for (let i = 0; i < 10 && node; i++) {
+              const label = node.querySelector('label');
+              if (label && !label.querySelector('input')) {
+                return label.textContent?.trim() || '';
+              }
+              node = node.parentElement;
             }
-            node = node.parentElement;
-          }
-          return '';
-        }).catch(() => '');
+            return '';
+          })
+          .catch(() => '');
 
         if (!groupLabel) continue;
 
         // Get option labels
-        const optionTexts = await page.evaluate(`(() => {
+        const optionTexts = (await page
+          .evaluate(
+            `(() => {
           const radios = document.querySelectorAll('input[type="radio"][name="${name}"]');
           return Array.from(radios).map(r => {
             const label = r.closest('label') || r.parentElement;
             return (label?.textContent || '').trim();
           }).filter(t => t.length > 0);
-        })()`).catch(() => []) as string[];
+        })()`,
+          )
+          .catch(() => [])) as string[];
 
         console.log(`    Radio "${groupLabel}": ${(optionTexts as string[]).join(' | ')}`);
 
         // Pick best option
         const gl = groupLabel.toLowerCase();
         let answer = '';
-        if (gl.includes('work from') || gl.includes('location') || gl.includes('remote') || gl.includes('office')) {
+        if (
+          gl.includes('work from') ||
+          gl.includes('location') ||
+          gl.includes('remote') ||
+          gl.includes('office')
+        ) {
           const opts = optionTexts as string[];
-          answer = opts.find(o => o.toLowerCase().includes('remote')) ||
-                   opts.find(o => o.toLowerCase().includes('hybrid')) ||
-                   opts.find(o => o.toLowerCase().includes('relocat')) ||
-                   opts[0] || '';
+          answer =
+            opts.find((o) => o.toLowerCase().includes('remote')) ||
+            opts.find((o) => o.toLowerCase().includes('hybrid')) ||
+            opts.find((o) => o.toLowerCase().includes('relocat')) ||
+            opts[0] ||
+            '';
         }
 
         if (answer) {
           // Click the label/container of the matching option
           const allRadios = await page.$$(`input[type="radio"][name="${name}"]`);
           for (const radio of allRadios) {
-            const radioText = await radio.evaluate((el) => {
-              const label = el.closest('label') || el.parentElement;
-              return (label?.textContent || '').trim();
-            }).catch(() => '');
-            if (radioText.toLowerCase().includes(answer.toLowerCase()) || answer.toLowerCase().includes(radioText.toLowerCase())) {
+            const radioText = await radio
+              .evaluate((el) => {
+                const label = el.closest('label') || el.parentElement;
+                return (label?.textContent || '').trim();
+              })
+              .catch(() => '');
+            if (
+              radioText.toLowerCase().includes(answer.toLowerCase()) ||
+              answer.toLowerCase().includes(radioText.toLowerCase())
+            ) {
               await radio.click({ force: true });
               console.log(`    ✓ Radio (Ashby): "${groupLabel}" → "${radioText}"`);
               break;
@@ -2098,7 +2383,12 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
       // Try saved rules first (user corrections override hardcoded defaults)
       try {
         const ruleAnswer = await answerQuestion(label, 'text');
-        if (ruleAnswer && ruleAnswer.length > 0 && ruleAnswer.length < 200 && !isRefusalText(ruleAnswer)) {
+        if (
+          ruleAnswer &&
+          ruleAnswer.length > 0 &&
+          ruleAnswer.length < 200 &&
+          !isRefusalText(ruleAnswer)
+        ) {
           await input.fill(ruleAnswer);
           await sleep(100);
           console.log(`    ✓ Filled (rule): "${label}" = "${ruleAnswer}"`);
@@ -2387,7 +2677,6 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
   } catch (err) {
     console.log(`  ⚠ Radio handler error (continuing): ${(err as Error).message}`);
   }
-
 }
 
 async function handleCoverLetterField(page: Page, job: ScoredJob): Promise<void> {
@@ -2592,9 +2881,12 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
 
     // Wait for form — Greenhouse uses first_name, Ashby uses _systemfield_name or generic input
     const nameField = await page
-      .waitForSelector('input[id="first_name"], input[id="firstname"], input[name*="first_name"], input[name*="name"][type="text"], form input[type="text"]', {
-        timeout: 15000,
-      })
+      .waitForSelector(
+        'input[id="first_name"], input[id="firstname"], input[name*="first_name"], input[name*="name"][type="text"], form input[type="text"]',
+        {
+          timeout: 15000,
+        },
+      )
       .catch(() => null);
     if (!nameField) {
       console.log('  No application form found');
@@ -2667,7 +2959,9 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
             const tag = el.tagName?.toLowerCase() || '?';
             const role = el.role || '';
             const type = el.type || '';
-            empties.push(`${label} [${tag}${type ? ':' + type : ''}${role ? ' role=' + role : ''}]`);
+            empties.push(
+              `${label} [${tag}${type ? ':' + type : ''}${role ? ' role=' + role : ''}]`,
+            );
           }
         });
         return empties;
@@ -2688,7 +2982,9 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
     // Capture answers before submitting
     try {
       await captureFormAnswers(page, job);
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
 
     // Click submit button
     // TEMP: Skip auto-submit for testing — set to true to disable submit
@@ -2798,7 +3094,7 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
             }
             return results;
           })()`;
-        const unfilled = await page.evaluate(snapshotScript).catch(() => []) as any[];
+        const unfilled = (await page.evaluate(snapshotScript).catch(() => [])) as any[];
         console.log(`  === UNFILLED FIELDS (${unfilled.length}) ===`);
         for (const f of unfilled) {
           console.log(`    ${f.required ? '[REQ]' : '[opt]'} ${f.tag} "${f.label}" id=${f.id}`);
@@ -2808,7 +3104,9 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob): Promise<Ap
       return { success: false, reason: 'Submit disabled — review mode' };
     }
 
-    const submitBtn = await page.$('form button[type="submit"], button:has-text("Submit Application"), button:has-text("Submit")');
+    const submitBtn = await page.$(
+      'form button[type="submit"], button:has-text("Submit Application"), button:has-text("Submit")',
+    );
     if (submitBtn) {
       console.log('  Clicking Submit...');
       await submitBtn.click();

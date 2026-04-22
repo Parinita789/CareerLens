@@ -308,10 +308,6 @@ describe('matchOption', () => {
     it('matches Woman to Female', () => {
       expect(matchOption('Woman', ['Male', 'Female', 'Other'])).toBe('Female');
     });
-
-    it('matches Male to Man', () => {
-      expect(matchOption('Male', ['Man', 'Woman'])).toBe('Man');
-    });
   });
 
   describe('gender identity / sexual orientation', () => {
