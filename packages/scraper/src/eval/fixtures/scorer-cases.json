@@ -104,6 +104,68 @@
         "reasonMinLength": 15
       },
       "notes": "Fullstack has partial overlap — accept 4-10"
+    },
+    {
+      "name": "vague-jd-no-tech-stack",
+      "job": {
+        "id": "eval-scorer-006",
+        "title": "Senior Backend Engineer",
+        "company": "Acme",
+        "location": "Remote, US",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Join our engineering team and help shape the future of our platform. We move fast, value autonomy, and build great things together. Competitive salary and equity.",
+        "url": "https://example.com/jobs/6",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 0, "max": 5 },
+        "reasonMinLength": 15
+      },
+      "notes": "REGRESSION GUARD — title alone suggests backend but JD has NO tech-stack signals. Must cap at 5 (uncertainty), not 7+ from title inference. This is the Twill-style failure mode."
+    },
+    {
+      "name": "no-skill-fabrication",
+      "job": {
+        "id": "eval-scorer-007",
+        "title": "Senior Backend Engineer",
+        "company": "Acme",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Build services in Node.js and deploy on AWS. Ship fast. Take ownership.",
+        "url": "https://example.com/jobs/7",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 6, "max": 10 },
+        "matched_skills_include": ["Node"],
+        "missing_skills_excludes": ["TypeScript", "microservices", "distributed systems", "Kafka", "Redis", "MongoDB"],
+        "reasonMinLength": 15
+      },
+      "notes": "REGRESSION GUARD — JD mentions only Node.js + AWS. Scorer must not pad matched_skills with TypeScript/microservices/distributed systems (common fabrication) AND must not list those as missing either (candidate has them). Tests the 'only what the JD says' rule."
+    },
+    {
+      "name": "title-misleading-wrong-domain",
+      "job": {
+        "id": "eval-scorer-008",
+        "title": "Senior Engineer, Platform",
+        "company": "Acme",
+        "location": "Remote",
+        "remote": true,
+        "employment_type": "full-time",
+        "description": "Join our ServiceNow platform team. You will own ITSM workflows, write Glide API scripts, customize business rules and UI policies. Experience with ServiceNow Studio required. Nice to have: Dynamics CRM, SharePoint.",
+        "url": "https://example.com/jobs/8",
+        "source": "greenhouse",
+        "scraped_at": "2026-04-22T00:00:00Z"
+      },
+      "expect": {
+        "fit_score": { "min": 0, "max": 4 },
+        "reasonMinLength": 15
+      },
+      "notes": "Title says 'Platform' (positive signal) but description is clearly ServiceNow/ITSM — wrong domain. Must score <=4 based on description content, not title."
     }
   ]
 }

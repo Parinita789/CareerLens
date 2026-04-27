@@ -71,6 +71,14 @@ ${workSummary}
 - Role requires technologies candidate has ZERO experience with as PRIMARY skill (e.g. ServiceNow, Dynamics CRM, BIOS firmware)
 - Role is DevOps/SRE/Security focused, not backend engineering
 
+## Uncertainty cap — CRITICAL
+If the job description is shorter than ~200 characters of meaningful content, or does NOT explicitly mention a specific tech stack / programming languages / frameworks / databases, cap fit_score at 5 and note "insufficient JD detail" in reason. Do NOT infer the stack from the title alone — "Senior Backend Engineer" does not imply Node.js/TypeScript without evidence.
+
+## matched_skills / missing_skills rules — CRITICAL
+- matched_skills MUST be drawn from the JD's actual text. Only list skills that are EXPLICITLY mentioned in the description. If the JD says "Node.js and AWS", list at most ["Node.js", "AWS"] — do NOT pad with TypeScript, microservices, etc. just because the candidate has them.
+- If the JD is vague and mentions no specific tech, matched_skills should be EMPTY — not fabricated from the candidate profile.
+- missing_skills are JD-required skills the candidate does NOT have. Never list something as missing if it appears in the candidate's profile above.
+
 ## Few-shot examples — learn from these
 
 ### Example 1 — Strong match (score: 9)
@@ -79,9 +87,21 @@ Job: "Senior Backend Engineer, Node.js/TypeScript, distributed systems, payment 
 Output: {
   "fit_score": 9,
   "apply": true,
-  "matched_skills": ["Node.js", "TypeScript", "AWS", "microservices", "distributed systems", "Javascript"],
+  "matched_skills": ["Node.js", "TypeScript", "distributed systems", "AWS"],
   "missing_skills": [],
   "reason": "Near-perfect match on stack, architecture patterns, and seniority level."
+}
+(Notice: "microservices" and "Javascript" are NOT listed — they aren't in the JD text. Only list what the JD explicitly mentions.)
+
+### Example 5 — Vague description (score: 4)
+Candidate: Node.js/TypeScript, microservices, AWS, 7 years
+Job: "Senior Backend Engineer. Join our team to build amazing products. Great culture, competitive pay."
+Output: {
+  "fit_score": 4,
+  "apply": false,
+  "matched_skills": [],
+  "missing_skills": [],
+  "reason": "Insufficient JD detail — title suggests backend but description lists no specific tech; cannot confirm stack fit."
 }
 
 ### Example 2 — Weak match (score: 3)
@@ -121,7 +141,7 @@ Output: {
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location}
-Description: ${job.description.slice(0, 500)}
+Description: ${job.description.slice(0, 2000)}
 
 IMPORTANT rules for matched_skills and missing_skills:
 - matched_skills: skills the job requires that the candidate HAS (listed above)

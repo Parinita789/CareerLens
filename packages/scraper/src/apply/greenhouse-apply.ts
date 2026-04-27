@@ -2987,11 +2987,15 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob, submit: boo
     }
 
     // Click submit button — gated on the `submit` flag threaded through from the UI.
-    // When `submit=false`, the form gets filled and we exit before the final click
-    // (dry-run / review mode). Default is false for safety.
+    // When `submit=false`, the form gets filled but we DO NOT click Submit. Instead
+    // of returning immediately (which would close the tab and move to the next job),
+    // we fall through to the watching loop below so the window stays open: the user
+    // can review and manually submit, and we'll detect that submission or the tab
+    // closing.
     const skipSubmit = !submit;
     if (skipSubmit) {
-      console.log('  ✓ Form filled (submit disabled). Review mode — will exit shortly.');
+      console.log('  ✓ Form filled (submit disabled). Review mode — window stays open.');
+      console.log('  Either click Submit manually to complete this application, or close the tab to move to the next job.');
       // Snapshot the final form state for diagnostics
       try {
         // Comprehensive snapshot: detects unfilled required fields (text, textarea, select, combobox, radio groups)
@@ -3100,26 +3104,25 @@ export async function applyViaGreenhouse(page: Page, job: ScoredJob, submit: boo
           console.log(`    ${f.required ? '[REQ]' : '[opt]'} ${f.tag} "${f.label}" id=${f.id}`);
         }
       } catch {}
-      await sleep(5000);
-      return { success: false, reason: 'Submit disabled — review mode' };
-    }
-
-    const submitBtn = await page.$(
-      'form button[type="submit"], button:has-text("Submit Application"), button:has-text("Submit")',
-    );
-    if (submitBtn) {
-      console.log('  Clicking Submit...');
-      await submitBtn.click();
-      await sleep(3000);
-
-      const success = await detectSubmissionSuccess(page);
-      if (success) {
-        console.log('  ✓ Application submitted successfully!');
-        return { success: true, method: 'greenhouse' };
-      }
-      console.log('  Submit clicked — waiting for confirmation...');
+      // fall through to watching loop — no return, no submit click.
     } else {
-      console.log('  No submit button found — watching for manual submission...');
+      const submitBtn = await page.$(
+        'form button[type="submit"], button:has-text("Submit Application"), button:has-text("Submit")',
+      );
+      if (submitBtn) {
+        console.log('  Clicking Submit...');
+        await submitBtn.click();
+        await sleep(3000);
+
+        const success = await detectSubmissionSuccess(page);
+        if (success) {
+          console.log('  ✓ Application submitted successfully!');
+          return { success: true, method: 'greenhouse' };
+        }
+        console.log('  Submit clicked — waiting for confirmation...');
+      } else {
+        console.log('  No submit button found — watching for manual submission...');
+      }
     }
 
     console.log('  (Watching for submission confirmation...)');

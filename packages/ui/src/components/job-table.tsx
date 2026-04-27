@@ -3,10 +3,20 @@ import type { ScoredJob } from '../types';
 
 type Tab = 'queue' | 'applied' | 'accepted' | 'declined' | 'rejected' | 'prepare';
 
+export type SortBy =
+  | 'default'        // existing behavior: new-within-24h first, then by score
+  | 'posted-new'     // posted_at descending (newest first)
+  | 'posted-old'     // posted_at ascending (oldest first)
+  | 'scraped-new'    // scraped_at descending
+  | 'scraped-old'    // scraped_at ascending
+  | 'score-high'     // fit_score descending
+  | 'score-low';     // fit_score ascending
+
 interface JobTableProps {
   jobs: ScoredJob[];
   activeTab: Tab;
   selectMode?: boolean;
+  sortBy?: SortBy;
   onSelectJob: (job: ScoredJob) => void;
   onDismissJob?: (job: ScoredJob) => void;
   onMarkApplied?: (job: ScoredJob) => void;
@@ -39,7 +49,7 @@ function scoreClass(score: number): string {
   return 'low';
 }
 
-export function JobTable({ jobs, activeTab, selectMode, onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onGenerateCoverLetters, onCancelSelect }: JobTableProps) {
+export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onGenerateCoverLetters, onCancelSelect }: JobTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) => {
@@ -72,19 +82,44 @@ export function JobTable({ jobs, activeTab, selectMode, onSelectJob, onDismissJo
     );
   }
 
+  const tsOrZero = (s?: string) => (s ? new Date(s).getTime() : 0);
+
   const sorted = [...jobs].sort((a, b) => {
+    // Applied tab always sorts by applied_at desc — most actionable order.
     if (activeTab === 'applied') {
-      // Applied tab: most recently applied first
-      const aTime = a.applied_at ? new Date(a.applied_at).getTime() : 0;
-      const bTime = b.applied_at ? new Date(b.applied_at).getTime() : 0;
-      return bTime - aTime;
+      return tsOrZero(b.applied_at) - tsOrZero(a.applied_at);
     }
-    // Queue/Rejected: new jobs first (scraped within last 24h), then by score
-    const now = Date.now();
-    const aNew = now - new Date(a.scraped_at).getTime() < 86400000 ? 1 : 0;
-    const bNew = now - new Date(b.scraped_at).getTime() < 86400000 ? 1 : 0;
-    if (bNew !== aNew) return bNew - aNew;
-    return b.fit_score - a.fit_score;
+    switch (sortBy) {
+      case 'posted-new':
+        return tsOrZero(b.posted_at) - tsOrZero(a.posted_at);
+      case 'posted-old': {
+        // Jobs with no posted_at go last (they're usually Indeed / sources that
+        // don't expose a date; sorting them to the top of "oldest first" would
+        // be misleading).
+        const aT = tsOrZero(a.posted_at);
+        const bT = tsOrZero(b.posted_at);
+        if (aT === 0) return 1;
+        if (bT === 0) return -1;
+        return aT - bT;
+      }
+      case 'scraped-new':
+        return tsOrZero(b.scraped_at) - tsOrZero(a.scraped_at);
+      case 'scraped-old':
+        return tsOrZero(a.scraped_at) - tsOrZero(b.scraped_at);
+      case 'score-high':
+        return b.fit_score - a.fit_score;
+      case 'score-low':
+        return a.fit_score - b.fit_score;
+      case 'default':
+      default: {
+        // Existing behavior: jobs scraped in the last 24h first, then by score.
+        const now = Date.now();
+        const aNew = now - new Date(a.scraped_at).getTime() < 86400000 ? 1 : 0;
+        const bNew = now - new Date(b.scraped_at).getTime() < 86400000 ? 1 : 0;
+        if (bNew !== aNew) return bNew - aNew;
+        return b.fit_score - a.fit_score;
+      }
+    }
   });
 
   const isNew = (scraped_at: string) => Date.now() - new Date(scraped_at).getTime() < 86400000;

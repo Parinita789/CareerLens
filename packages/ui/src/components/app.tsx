@@ -5,6 +5,7 @@ import { TabBar } from './tab-bar';
 import { JobTable } from './job-table';
 import { JobDetail } from './job-detail';
 import { CommandPanel } from './command-panel';
+import type { SortBy } from './job-table';
 import { KeywordManager } from './keyword-manager';
 import { ProfileEditor } from './profile-editor';
 import { FormAnswers } from './form-answers';
@@ -34,6 +35,7 @@ export function App() {
   const [newOnlyFilter, setNewOnlyFilter] = useState(false);
   const [addJobOpen, setAddJobOpen] = useState(false);
   const [newJob, setNewJob] = useState({ title: '', company: '', url: '' });
+  const [sortBy, setSortBy] = useState<SortBy>('default');
   // Global "allow bot to submit applications" toggle, persisted in UserModel.settings.
   const [allowAutoSubmit, setAllowAutoSubmit] = useState<boolean>(false);
 
@@ -156,25 +158,33 @@ export function App() {
     }
   }, []);
 
-  const byPlatform = platformFilter === 'all' ? jobs : jobs.filter((j) => j.source === platformFilter);
+  // Split by status FIRST — these arrays drive the tab badge counts and must
+  // reflect totals, not the currently-applied filter (otherwise filtering on
+  // Queue makes the Applied/Accepted badges shrink too).
+  const queue = jobs.filter((j) => j.status === 'to_apply');
+  const applied = jobs.filter((j) => ['applied', 'interviewing', 'no_response'].includes(j.status));
+  const accepted = jobs.filter((j) => j.status === 'accepted');
+  const declined = jobs.filter((j) => j.status === 'declined');
+  const rejected = jobs.filter((j) => j.status === 'rejected');
+
+  const activeTabJobs = activeTab === 'queue' ? queue
+    : activeTab === 'applied' ? applied
+    : activeTab === 'accepted' ? accepted
+    : activeTab === 'declined' ? declined
+    : rejected;
+
+  // Filters apply ONLY to the currently-visible tab. State persists across tab
+  // switches (so a search query carries over if you flip to a different tab to
+  // look up the same company), but other tabs' counts are unaffected.
+  const byPlatform = platformFilter === 'all' ? activeTabJobs : activeTabJobs.filter((j) => j.source === platformFilter);
   const byScore = scoreFilter > 0 ? byPlatform.filter((j) => j.fit_score === scoreFilter) : byPlatform;
   const byNew = newOnlyFilter ? byScore.filter((j) => Date.now() - new Date(j.scraped_at).getTime() < 86400000) : byScore;
-  const filtered = searchQuery
+  const tabJobs = searchQuery
     ? byNew.filter((j) =>
         j.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
         j.title.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : byNew;
-  const queue = filtered.filter((j) => j.status === 'to_apply');
-  const applied = filtered.filter((j) => ['applied', 'interviewing', 'no_response'].includes(j.status));
-  const accepted = filtered.filter((j) => j.status === 'accepted');
-  const declined = filtered.filter((j) => j.status === 'declined');
-  const rejected = filtered.filter((j) => j.status === 'rejected');
-  const tabJobs = activeTab === 'queue' ? queue
-    : activeTab === 'applied' ? applied
-    : activeTab === 'accepted' ? accepted
-    : activeTab === 'declined' ? declined
-    : rejected;
 
   if (loading) {
     return (
@@ -276,6 +286,23 @@ export function App() {
                 </button>
               ))}
             </div>
+            <div className="sort-filter">
+              <span className="score-filter-label">Sort:</span>
+              <select
+                className="sort-select"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                title="How to order jobs in the table"
+              >
+                <option value="default">Default (new, then score)</option>
+                <option value="posted-new">Posted: newest first</option>
+                <option value="posted-old">Posted: oldest first</option>
+                <option value="scraped-new">Scraped: newest first</option>
+                <option value="scraped-old">Scraped: oldest first</option>
+                <option value="score-high">Score: high to low</option>
+                <option value="score-low">Score: low to high</option>
+              </select>
+            </div>
             {activeTab === 'queue' && !autoApplyMode && (
               <button className="select-to-apply-btn" onClick={() => setAutoApplyMode(true)}>
                 Select to Auto Apply
@@ -287,7 +314,7 @@ export function App() {
               </button>
             )}
           </div>
-          <JobTable jobs={tabJobs} activeTab={activeTab} selectMode={autoApplyMode} onSelectJob={setSelectedJob} onDismissJob={handleDismissJob} onMarkApplied={handleMarkApplied} onUpdateStatus={handleUpdateStatus} onAutoApply={(ids) => { handleAutoApply(ids); setAutoApplyMode(false); }} onGenerateCoverLetters={(ids) => { handleGenerateCoverLetters(ids); setAutoApplyMode(false); }} onCancelSelect={() => setAutoApplyMode(false)} />
+          <JobTable jobs={tabJobs} activeTab={activeTab} selectMode={autoApplyMode} sortBy={sortBy} onSelectJob={setSelectedJob} onDismissJob={handleDismissJob} onMarkApplied={handleMarkApplied} onUpdateStatus={handleUpdateStatus} onAutoApply={(ids) => { handleAutoApply(ids); setAutoApplyMode(false); }} onGenerateCoverLetters={(ids) => { handleGenerateCoverLetters(ids); setAutoApplyMode(false); }} onCancelSelect={() => setAutoApplyMode(false)} />
         </>
       )}
 

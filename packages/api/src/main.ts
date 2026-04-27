@@ -17,7 +17,21 @@ async function bootstrap() {
     origin: 'http://localhost:5173',
   });
 
+  // High-frequency UI pollers. Logging each hit drowns out everything else
+  // useful (cover-letter generations, applies, etc.). They're still served —
+  // just not logged.
+  const SILENT_POLL_PATHS = [
+    '/api/jobs',
+    '/api/form-answers/pending',
+    '/api/pipeline/status',
+    '/api/pipeline/logs',
+  ];
+
   app.use((req: any, res: any, next: any) => {
+    if (SILENT_POLL_PATHS.some((p) => req.originalUrl.startsWith(p))) {
+      next();
+      return;
+    }
     const start = Date.now();
     res.on('finish', () => {
       const ms = Date.now() - start;

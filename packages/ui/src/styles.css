@@ -327,6 +327,29 @@ h1 {
   margin-right: 4px;
 }
 
+/* Sort dropdown in the filter row */
+.sort-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sort-select {
+  background: var(--bg-2, #1c1c1c);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 6px;
+  padding: 5px 28px 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2012%208%22%3E%3Cpath%20fill%3D%22%23888%22%20d%3D%22M6%208L0%200h12z%22%2F%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 8px 6px;
+}
+.sort-select:hover { border-color: var(--accent, #4a90e2); }
+
 /* ── Platform Filter ─────────────────────────────────────────────── */
 
 .platform-filter {

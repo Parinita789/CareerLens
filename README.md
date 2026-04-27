@@ -1,267 +1,200 @@
 # Job Agent Monorepo
 
-> **This project was developed for personal use.**
+> **Developed for personal use.** The multi-agent-looking surface is an architecture exercise — the actual runtime is a sequential pipeline of pure functions, not a production scale-out target.
 
-An AI-powered job hunting automation platform that scrapes job listings from multiple platforms, scores them for fit, generates tailored cover letters, pre-scrapes application forms for review, and automates LinkedIn Easy Apply & Greenhouse job applications with intelligent form filling — all from a single monorepo.
+An AI-powered job-hunting tool that scrapes listings from multiple platforms, scores them for fit, generates tailored cover letters, pre-scrapes application forms for review, and — optionally — submits LinkedIn Easy Apply and Greenhouse/Ashby applications for you. Everything is in one monorepo with a single `npm run dev` workflow.
 
 ## Architecture
 
 ```
 packages/
-├── shared/    — Mongoose schemas, DB connection, unified LLM client (3 providers)
-├── scraper/   — Job scraping, scoring, cover letters, form pre-scraping, auto-apply
-├── api/       — NestJS REST API
+├── shared/    — Mongoose schemas, DB connection, unified LLM client, cover-letter generator
+├── scraper/   — Job scraping, scoring, cover letters, form pre-scraping, auto-apply, eval harnesses
+├── api/       — NestJS REST API (jobs, profile, pipeline, settings, form-answers, alerts)
 └── ui/        — React + Vite dashboard
 ```
 
 ## Pipeline
 
-Selectable individually or together from the dashboard:
+Selectable from the dashboard's Pipeline modal, or runnable individually via npm scripts.
 
-| Phase              | What it does                                                                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Scrape & Score** | Scrapes LinkedIn (8 queries + alerts), Greenhouse (API), Lever (API). Two-layer filtering + LLM scoring. Jobs scoring 7+ get forms pre-scraped automatically. |
-| **Gmail Alerts**   | Polls Gmail for LinkedIn alert emails via IMAP. Parses job URLs, scrapes + scores per alert keyword for real-time results.                                    |
-| **Rescore**        | Re-evaluates all existing jobs with updated profile/rules.                                                                                                    |
-| **Auto Apply**     | Opens Greenhouse pages, fills ALL fields from pre-scraped answers instantly (zero LLM calls). Falls back to profile + rules for fields not pre-scraped.       |
+| Phase              | What it does                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Scrape & Score** | Scrapes Ashby, Greenhouse, LinkedIn (8 queries + alerts), Lever. Two-layer filter + LLM scoring per company/query. Jobs scoring 7+ get their forms pre-scraped automatically. |
+| **Gmail Alerts**   | Polls Gmail IMAP for today's LinkedIn alert emails. Parses job URLs, scrapes each page, scores per alert keyword.                                                            |
+| **Cover Letters**  | LLM-generated 3-paragraph cover letters for `to_apply` jobs. Runs in-process from the API; no subprocess spawn.                                                              |
+| **Auto Apply**     | Opens Greenhouse / Ashby / LinkedIn Easy Apply, fills every field from pre-scraped answers + rules + profile (zero LLM calls). Submit click gated on a global UI toggle.       |
+
+## "LLM is last option" architecture
+
+Every form question flows through layered answer resolution. LLM only fires when everything deterministic misses.
+
+| Priority | Source                 | Notes                                                                              |
+| -------- | ---------------------- | ---------------------------------------------------------------------------------- |
+| 1        | **Pre-scraped answers**| Reviewed in Prepare tab, stored in `applicationFields` collection                  |
+| 2        | **Saved rules**        | `ProfileAnswer` collection — user corrections + demographic rules + seed defaults  |
+| 3        | **Profile defaults**   | Identity/demographics pulled from `UserModel` (name, phone, gender, pronouns, etc.) |
+| 4        | **LLM fallback**       | Receives demographics + ALL saved rules as context so paraphrases still resolve   |
+
+The LLM prompt for questions always includes a **Candidate demographics** block and a **Saved answers** list — so even when a paraphrase misses the rule regex, the LLM sees ground truth and can't invent answers.
 
 ## Prepare Tab — Pre-Scrape & Review Before Apply
 
-The core workflow: review every answer BEFORE the bot fills the form.
+Core workflow: every answer reviewed BEFORE the bot fills the form.
 
-### How it works
+1. During scraping, jobs scoring 7+ get their Greenhouse forms pre-scraped (parallel, 5 at a time)
+2. Every input, dropdown, radio, checkbox, textarea captured with labels, types, options
+3. Auto-answered from pre-scraped data → saved rules → profile → LLM
+4. Shown in Prepare tab — expandable table, options as chips, required fields marked with red `*`
+5. Edit any answer inline — edits saved as rules for all future applications
+6. One-click Auto Apply fills the form instantly, no LLM regeneration
 
-1. **During scraping** — jobs scoring 7+ automatically get their Greenhouse application forms pre-scraped (parallel, 5 at a time)
-2. **Form fields extracted** — every input, dropdown, radio, checkbox, textarea captured with their labels, types, and available options
-3. **Auto-answered** — profile data, saved rules, and smart matching fill answers. Priority: saved rules → profile defaults → LLM (only during pre-scrape, never during auto-apply)
-4. **Shown in Prepare tab** — expandable table showing all fields with answers, options as clickable chips, required fields marked with red `*`
-5. **Review & edit** — click Edit on any field to change the answer. Edits saved as rules for all future applications
-6. **Auto Apply** — one click fills the Greenhouse form instantly using reviewed answers. Zero LLM calls, zero surprises
+Features:
+- **Status indicators** — Ready (all fields answered) / Needs Review (required unknowns)
+- **Batch apply** — "X Ready — Click to Apply" button for all ready jobs at once
+- **Per-job Auto Apply** + Dismiss (×) to remove jobs you won't touch
+- **Cover letter preview** — expanded view shows the generated letter
+- **Phone-code pickers + phone radio groups** auto-filtered (they're form garbage)
 
-### Prepare tab features
+## Global safety toggle — Auto-submit ON/OFF
 
-- **Status indicators** — Ready (all fields answered) / Needs Review (has unknowns)
-- **"X Ready — Click to Apply"** button — batch auto-apply all ready jobs
-- **Select to Apply** mode — checkboxes for selecting specific jobs
-- **Per-job Auto Apply** button — apply to individual jobs
-- **Dismiss** (×) button — remove jobs you don't want to apply to
-- **Required fields** — detected from `*` in labels + known required patterns (name, email, sponsorship, etc.)
-- **Dropdown options visible** — shown as chips under each field so you can see all available choices
-- **Multi-select checkboxes** — for "select all that apply" questions, shown as checkable list in edit mode
-- **Cover letter preview** — shown in expanded view, auto-generated during pre-scrape
+A **master switch in the header** controls whether the bot is allowed to click "Submit Application" during auto-apply.
 
-### What gets filtered out
+- **OFF (default, dry-run)** — fills every form field, runs every auto-fill routine, then STOPS before the Submit click. Prints the final form snapshot to the console so you can see what would have been submitted.
+- **ON (live)** — bot clicks Submit on Greenhouse/Ashby and on LinkedIn Easy Apply's review step.
 
-- **Phone country code pickers** — detected by `+\d+` in options, skipped automatically
-- **Phone radio groups** — garbage `["Country*", "Phone*"]` fields filtered
-- **Cover Letter file field** — hidden from review (auto-generated separately)
+The toggle is persisted in `UserModel.settings.allowAutoSubmit` via `GET`/`PUT /api/settings`. The pipeline service re-reads it on every apply spawn, so flipping the switch takes effect without restarting anything.
 
-## Auto Apply (Greenhouse)
+## Eval harnesses
 
-The form filler during auto-apply:
+Four regression harnesses that call the real LLM paths with fixtures and grade the output. Run on demand, not from `npm test`.
 
-1. **Loads pre-scraped answers** — from `applicationFields` collection (reviewed in Prepare tab)
-2. **Resolves URL** — converts company career page URLs to direct `job-boards.greenhouse.io` URLs, handles iframes
+| Command                          | Target function                        | Fixture                                         |
+| -------------------------------- | -------------------------------------- | ----------------------------------------------- |
+| `npm run eval:answers`           | `answerQuestion` (form Q&A)            | `eval/fixtures/answer-cases.json` (45 cases)    |
+| `npm run eval:cover-letters`     | `generateCoverLetter`                  | `eval/fixtures/cover-letter-cases.json` (4)     |
+| `npm run eval:form-pre-answer`   | `preAnswerFields` (bulk form filler)   | `eval/fixtures/form-pre-answerer-cases.json` (15 field assertions — grades value AND source) |
+| `npm run eval:scorer`            | `scoreFitWithLLM`                      | `eval/fixtures/scorer-cases.json` (5)           |
+| `npm run eval:all`               | all four in sequence                   | ~3.5 min total; exits non-zero on any failure   |
+
+Shared grader utilities live in `packages/scraper/src/eval/_lib.ts`. Grading predicates: `equals`, `includes`, `oneOf`, `notIncludes`, `regex`, `minLength`, `maxLength`, plus numeric-range and array-inclusion helpers for the scorer harness.
+
+**Seeding** — one-time setup to populate canonical rules and demographics:
+
+```bash
+npm run eval:seed-rules          # salary/experience/remote keyword rules
+npm run eval:seed-demographics   # UserModel.demographics + paraphrase-friendly rules
+```
+
+## Auto Apply (Greenhouse / Ashby)
+
+The form filler:
+
+1. **Loads pre-scraped answers** from `applicationFields` collection
+2. **Resolves URL** — converts company career page URLs to `job-boards.greenhouse.io`, handles iframes
 3. **Clicks "Autofill with MyGreenhouse"** if available
-4. **Uploads resume + cover letter** — cover letter loaded from pre-scraped data or DB, no LLM regeneration
-5. **Fills all fields instantly** — pre-scraped answers filled via `input.fill()` (not character-by-character typing)
-6. **Dropdown selection** — scoped to each dropdown's `aria-controls` menu (avoids phone picker interference), type-to-filter + click
-7. **Two-pass combobox scan** — scrolls form, scans twice to catch lazy-loaded dropdowns below the fold
-8. **Fill-by-ID fallback** — any pre-scraped combobox field missed by the main handler is found directly by its element ID and filled
-9. **Checkbox support** — "select all that apply" questions handled with multi-select
-10. **Auto-submit** — clicks Submit automatically after filling, detects success page, marks job as applied
-11. **Applied jobs removed** — jobs successfully applied are removed from the Prepare tab automatically
-12. **Zero LLM calls** — all answers come from pre-scraped data, saved rules, or profile. Never guesses
-13. **Separate LinkedIn sessions** — scraping uses test account (`linkedin-session.json`), auto-apply uses real account (`linkedin-session-apply.json`)
-14. **Page close detection** — exits cleanly when you close the browser tab or window
-15. **Session persistence** — saves/loads Greenhouse + LinkedIn cookies between jobs
-
-### Answer Priority (consistent everywhere)
-
-| Priority | Source               | Description                                                                |
-| -------- | -------------------- | -------------------------------------------------------------------------- |
-| 1        | **Pre-scraped**      | Reviewed in Prepare tab, stored in `applicationFields`                     |
-| 2        | **Saved rules**      | User corrections from Form Answers, Prepare tab edits, previous form fills |
-| 3        | **Profile defaults** | Hardcoded mappings (name, email, demographics, work auth)                  |
-| 4        | **LLM**              | Only during pre-scraping phase, never during auto-apply                    |
+4. **Uploads resume + cover letter** — cover letter loaded from DB (no LLM regen)
+5. **Fills every field** via `input.fill()` (pre-scraped answers + rules + profile)
+6. **Dropdowns scoped via `aria-controls`** — prevents the phone country picker from hijacking selection
+7. **Two-pass combobox scan** with scrolling to catch lazy-loaded fields
+8. **Fill-by-ID fallback** finds any missed combobox directly
+9. **Checkbox groups** — "select all that apply" handled
+10. **Submit (guarded)** — clicks Submit only if the global Auto-submit toggle is ON; otherwise logs "Submit disabled — review mode" and exits
+11. **Success detection** — submit button gone + "thank you" text → marks job `applied`, removes from Prepare tab
+12. **Zero LLM calls during auto-apply** — all answers deterministic
 
 ### Smart Option Matching (`smartMatchOption`)
 
-Deterministic matching without LLM for common field types:
+Deterministic matching of short rule-answers onto long-form dropdown options:
 
-| Answer              | Dropdown Options                                           | Match Method                             |
-| ------------------- | ---------------------------------------------------------- | ---------------------------------------- |
-| `"United States"`   | `"US"`, `"USA"`, `"United States of America"`              | Country aliases                          |
-| `"Yes"` / `"No"`    | `"Yes, I am authorized..."`, `"No, I will not require..."` | Starts-with + positive/negative phrasing |
-| `"Female"`          | `"Female"`, `"Woman"`, `"Female (she/her)"`                | Gender aliases (Female ↔ Woman)          |
-| `"Asian"`           | `"South Asian (inclusive of...)"`, `"Asian"`               | Prefers South Asian, falls back to Asian |
-| `"Heterosexual"`    | `"Straight"`, `"Straight/Heterosexual"`, `"Cisgender"`     | Sexual orientation aliases               |
-| `"No"` (veteran)    | `"I am not a protected veteran"`                           | Label-aware negative matching            |
-| `"No"` (disability) | `"No, I do not have a disability..."`                      | Label-aware negative matching            |
+| Rule answer        | Dropdown options                                           | Match method                            |
+| ------------------ | ---------------------------------------------------------- | --------------------------------------- |
+| `"United States"`  | `"US"`, `"USA"`, `"United States of America"`              | Country aliases                         |
+| `"Yes"` / `"No"`   | `"Yes, I am authorized..."`, `"No, I will not require..."` | Starts-with + positive/negative phrasing |
+| `"Female"`         | `"Female"`, `"Woman"`, `"Female (she/her)"`                | Gender aliases                          |
+| `"Asian"`          | `"South Asian (inclusive of...)"`, `"Asian"`               | Prefers South Asian, falls back to Asian |
+| `"Heterosexual"`   | `"Straight"`, `"Cisgender"`                                | Sexual orientation aliases              |
+| `"No"` (veteran)   | `"I am not a protected veteran"`                           | Label-aware negative matching           |
 
-### Profile-Based Auto-Answers
+## Auto Apply (LinkedIn Easy Apply)
 
-Questions answered automatically from candidate profile:
+Separate flow — `applyViaEasyApply`. Walks the multi-step modal, uploads resume, handles the review step. The final Submit click is gated on the same global Auto-submit toggle.
 
-- **Identity** — name, email, phone, LinkedIn, GitHub
-- **Work authorization** — "Yes" (authorized), "No" (no sponsorship needed)
-- **Location** — city/state from profile, "United States" for country
-- **Demographics** — Female, Asian/South Asian, She/Her, Heterosexual/Cisgender, not veteran, no disability, not Hispanic
-- **Employment history** — "Have you worked for X?" checks resume work history against company name
-- **Consent/acknowledgment** — "By checking this box, I consent..." → always Yes
-- **Hybrid/remote/onsite** — Yes to all work arrangement questions
-- **Salary** — from profile compensation preferences
-- **Education** — degree, school, major, graduation year from profile
-- **How did you hear** — LinkedIn
-- **Optional links** — Twitter, Portfolio, Other Links left empty (won't guess)
+## Dashboard
 
-### Form Answer Learning
-
-- Answers you edit in Prepare tab → saved as rules for all future applications
-- LLM answers during pre-scraping are NOT auto-saved as rules (prevents garbage)
-- Form captures during auto-apply filter out: phone codes, country names, numeric IDs, short labels
-- View and edit all saved rules in **Hamburger menu → Saved Rules**
-
-## Dashboard Features
-
-- **Tabs:** Queue, Prepare, Applied, Accepted, Rejected, Cover Letters
-- **Filters:** Search (company/title), Platform (LinkedIn/Greenhouse/Lever), Score (5-9)
-- **Select to Auto Apply** — checkboxes → select jobs → Auto Apply or Generate Cover Letters
-- **Mark Applied / Dismiss** — with auto vs manual tracking
+- **Tabs** — Queue, Prepare, Applied, Accepted, Declined, Rejected, Cover Letters
+- **Filters** — Search (company/title), Platform, Score (5-9), "New" only
+- **Scraped date column** on every tab — relative time (`3d ago`, `2w ago`), hover for full timestamp. Helps you spot "I've seen this job before."
+- **Select to Auto Apply** — checkboxes on Queue → Auto Apply / Generate Cover Letters
 - **Status dropdown** on Applied tab — Waiting, Interviewing, Accepted, Declined, No Response
-- **Cover Letters tab** — split-panel with search, inline copy, latest first
-- **Cover letter section hidden** for rejected/declined jobs
-- **New badge** — jobs scraped within 24h marked "New", sorted to top
-- **Non-blocking pipeline** — floating bottom bar with logs, stop button
-- **Hamburger menu:** Candidate Profile, Saved Rules (with add/edit/delete), Keywords, Pipeline
-- **Compact layout** — full-width, minimal padding, maximizes space for job listings
+- **Header** — Auto-submit pill (ON green / OFF red), hamburger menu
+- **Hamburger** — Candidate Profile, Saved Rules, Keywords, Pipeline
+- **Floating pipeline bar** — live logs + Stop button while anything is running
 
 ## Tech Stack
 
-- **Language:** TypeScript (full-stack)
-- **Monorepo:** npm workspaces
-- **Scraping:** Playwright (Chrome, non-headless for apply, headless for pre-scrape)
-- **LLM:** Claude CLI subprocess / Ollama / Anthropic API (switchable via env)
-- **Backend:** NestJS
-- **Frontend:** React 18, Vite
-- **Database:** MongoDB (Mongoose ODM)
-- **Email:** Gmail IMAP (imapflow)
+- **Language** — TypeScript across the monorepo (npm workspaces)
+- **Scraping** — Playwright (Chrome). Non-headless for interactive LinkedIn login + apply; headless for API-board scrapes and Gmail URL scrapes
+- **LLM** — Claude CLI / Anthropic SDK / Ollama — switchable via `LLM_PROVIDER` env
+- **Backend** — NestJS on Node.js
+- **Frontend** — React 18, Vite
+- **Database** — MongoDB (Mongoose)
+- **Email** — Gmail IMAP (`imapflow`)
 
-## LLM Providers
+## LLM providers
 
 Controlled by `LLM_PROVIDER` in `.env`:
 
-| Provider     | How                                                   | Quality                     | Cost              |
-| ------------ | ----------------------------------------------------- | --------------------------- | ----------------- |
-| `claude-cli` | Spawns `claude -p --model claude-opus-4-6` subprocess | Best (Opus 4.6, 1M context) | $0 (subscription) |
-| `ollama`     | Local/remote Ollama server                            | Decent                      | $0                |
-| `anthropic`  | Anthropic API                                         | Great                       | Per-token         |
+| Provider       | How                                                            | Notes                                                                    |
+| -------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `claude-cli`   | Spawns `claude -p --model claude-sonnet-4-6` subprocess        | Uses your Claude CLI subscription. Subprocess startup adds ~10s per call |
+| `anthropic`    | Direct Anthropic SDK with `claude-sonnet-4-6`                  | Fastest per-call (~5-10s). Requires `ANTHROPIC_API_KEY`                  |
+| `ollama`       | Local or remote Ollama server                                  | Free. Quality depends on local model (defaults to `llama3:8b-instruct`)  |
 
-All consumers use `llmChat()` from `@job-agent/shared` — scoring, cover letters, form pre-answering, resume parsing all switch automatically.
+All consumers call `llmChat()` from `@job-agent/shared` — scoring, cover letters, form Q&A, resume parsing all switch together.
 
-## Design Decisions
+## Design decisions
 
-### Pre-Scrape vs Real-Time Form Filling
+### Pre-scrape and review, don't fill live
+LLM-based form filling during auto-apply was slow, error-prone, and unreviewable. Forms are pre-scraped headlessly during scoring → reviewed in Prepare → auto-apply uses pre-verified answers instantly. No LLM calls during the time-sensitive browser fill.
 
-**Problem:** LLM-based form filling during auto-apply was slow (5-30s per field), error-prone (wrong country, wrong gender), and not reviewable.
+### Dry-run by default
+The global Auto-submit toggle defaults to OFF. Flipping it ON is a deliberate, visible action in the header. Matches the pre-toggle behavior (submit was hardcoded disabled) while making the switch reachable without editing code.
 
-**Solution:** Pre-scrape forms during scoring → review in UI → auto-apply uses pre-verified answers instantly.
+### Demographics in DB, not hardcoded
+`UserModel.demographics` holds race, pronouns, disability, veteran, citizenship, etc. Injected into every LLM prompt so paraphrased questions ("What is your ethnicity?") resolve correctly without needing per-paraphrase keyword rules.
 
-- Forms scraped headlessly in parallel (5 at a time) during phase 2 scoring
-- Only for 7+ scored jobs (not all 200+ scraped jobs)
-- Dropdown options captured by clicking each combobox and reading the menu
-- Answers matched to options using `smartMatchOption` (deterministic, no LLM)
-- All answers reviewable and editable in Prepare tab before applying
+### Dropdown menu scoping via `aria-controls`
+Greenhouse forms always have a phone country code picker in the DOM. A generic `querySelectorAll('[role="option"]')` returned 246 phone-code options. Each React Select has `aria-controls="react-select-{id}-listbox"` — option reading is now scoped to that specific menu.
 
-### Zero LLM During Auto-Apply
+### Separate LinkedIn sessions
+`linkedin-session.json` — scraping session (test account). `linkedin-session-apply.json` — apply session (real account). Prevents rate limiting during bulk scrape from burning the account used to submit applications.
 
-**Problem:** LLM guesses during form filling produced wrong answers (India instead of US, Male instead of Female) and added 10-30s per field.
+### Cover letter generation lives in `@job-agent/shared`
+Used to be spawned via `npx tsx generate-one-cover-letter.ts` — that added ~5s per call. Now imported in-process by the API. Single reference letter (down from 3), deduplicated banned-phrases list, `claude-sonnet-4-6` (down from Opus 4.6). End-to-end ~10-15s.
 
-**Solution:** Complete separation — LLM runs once during pre-scraping (offline), never during the time-sensitive browser fill.
+### Required-field detection
+`*` in label → required. Plus a known-pattern fallback: name, email, phone, resume, sponsorship, visa, authorization, country, gender. "Needs Review" only triggers when a required field is unanswered — optional unknowns don't block batch apply.
 
-- Pre-scraped answers, saved rules, and profile handle 100% of known fields
-- Unknown fields left empty for user to fill manually (better than wrong LLM guess)
-- Only exception: "why interested" textarea questions use cover letter as context
+### 10-day freshness filter
+Jobs older than 10 days (by source-provided `posted_at`) are dropped before scoring. Stale roles are usually filled; LLM budget would be wasted.
 
-### Dropdown Menu Scoping
-
-**Problem:** Greenhouse forms have a phone country code picker (`id="country"`) that's always in the DOM. Every `querySelectorAll('[role="option"]')` returned 246 phone code options instead of the actual dropdown's options.
-
-**Solution:** Use `aria-controls` attribute to scope option reading to the correct menu.
-
-- Each React Select combobox has `aria-controls="react-select-{id}-listbox"`
-- Read options only from that specific listbox element
-- Phone code pickers detected by `+\d+` pattern in options and skipped
-- Two-pass combobox scan with scrolling catches lazy-loaded fields below the fold
-- Fill-by-ID fallback finds any remaining unfilled pre-scraped combobox fields directly by element ID
-
-### Auto-Submit
-
-**Problem:** After filling the form, the bot waited silently for manual submission — requiring the user to review and click submit for every job.
-
-**Solution:** Bot clicks Submit automatically after filling, then detects the success page.
-
-- Captures form answers before submitting
-- Clicks `button[type="submit"]` or `button:has-text("Submit Application")`
-- Detects submission success (submit button gone + form gone + "thank you" text)
-- Marks job as `applied` in both `jobs` and `applicationFields` collections
-- Applied jobs automatically removed from the Prepare tab
-
-### Separate LinkedIn Sessions
-
-**Problem:** Using the same LinkedIn account for scraping and applying exposed the real account to rate limiting and bot detection during scraping.
-
-**Solution:** Separate session files for scraping and applying.
-
-- `linkedin-session.json` — test account for scraping (phase 2, Gmail alerts)
-- `linkedin-session-apply.json` — real account for auto-apply (phase 4)
-- Sessions saved automatically after each job
-- Manual apply ("Apply" link in UI) uses default browser — always your real account
-
-### Required Field Detection
-
-**Problem:** Optional unknown fields (like "Other Links") made jobs show as "Needs Review" even when all required fields were answered.
-
-**Solution:** Detect required fields from `*` in labels + known patterns, only count required unknowns.
-
-- Labels keep `*` during scraping (not stripped until conversion step)
-- `*` anywhere in label → required
-- Known required patterns: name, email, phone, resume, sponsorship, visa, authorization, country, gender
-- Unknown count only includes required non-file fields
-
-### Cover Letter Generation
-
-- 3 gold-standard Claude-generated cover letters hardcoded as few-shot examples
-- AI skills highlighted when job mentions AI/agents/LLM/prompt engineering
-- Generated during pre-scrape, loaded from DB during auto-apply (no regeneration)
-- Falls back to file upload if textarea not found
-
-### Scoring
-
-- Two-layer: fast filter (zero LLM cost) → LLM scoring (batches of 3)
-- Per-source, per-company scoring for real-time UI updates
-- Gmail alerts scored per alert keyword (not all at once)
-- Staff-level roles not penalized for seniority
-- Jobs outside US auto-rejected
-
-### Deduplication
-
-Three layers: ID, company+title, URL — across all sources and runs.
-
-### Anti-Detection
-
+### Anti-detection
 - Full-screen Chrome with realistic fingerprint (plugins, hardware, geolocation, screen)
 - `navigator.webdriver` set to `undefined`
-- Session cookie persistence (LinkedIn + Greenhouse)
-- Browser disconnect detection — clean exit when user closes tab or window
+- Cookie persistence between runs
+- LinkedIn login uses 5-minute manual-login polling with per-transition URL logging, waits for the `li_at` auth cookie rather than URL patterns (catches SSO / checkpoint / email-verification flows correctly)
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
 - Node.js, npm
-- MongoDB (local or Docker)
-- Claude Code CLI (for `claude-cli` provider) or Ollama (for `ollama` provider)
+- MongoDB (local or Docker — `mongodb://localhost:27017/job-tracker`)
+- One of:
+  - Claude Code CLI (for `claude-cli` provider)
+  - Anthropic API key (for `anthropic` provider)
+  - Ollama server (for `ollama` provider)
 
 ### Install
 
@@ -269,9 +202,24 @@ Three layers: ID, company+title, URL — across all sources and runs.
 npm install
 ```
 
-### Candidate Profile
+### Environment
 
-Upload a resume (PDF) through the UI to auto-generate a profile, or copy the example:
+Create `.env` at the repo root:
+
+```
+MONGO_URI=mongodb://localhost:27017/job-tracker
+API_PORT=3001
+LLM_PROVIDER=claude-cli
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODEL=llama3:8b-instruct-q4_0
+ANTHROPIC_API_KEY=
+GMAIL_EMAIL=your-job-alerts@gmail.com
+GMAIL_APP_PASSWORD=your-app-password
+```
+
+### Candidate profile
+
+Upload a resume (PDF) through the UI's Candidate Profile to auto-generate the profile document, or copy the example:
 
 ```bash
 cp packages/scraper/profile/candidate.example.json packages/scraper/profile/candidate.json
@@ -279,56 +227,55 @@ cp packages/scraper/profile/candidate.example.json packages/scraper/profile/cand
 
 Place your resume PDF in `packages/scraper/data/resume/`.
 
-### Environment
-
-Create a `.env` file at the root:
-
-```
-MONGO_URI=mongodb://localhost:27017/job-tracker
-API_PORT=3001
-LLM_PROVIDER=claude-cli
-OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_MODEL=llama3:latest
-ANTHROPIC_API_KEY=
-GMAIL_EMAIL=your-job-alerts@gmail.com
-GMAIL_APP_PASSWORD=your-app-password
-```
-
-### Run
+### Seed baseline rules + demographics
 
 ```bash
-# API + UI
-npm run api                     # Backend on port 3001
-npm run ui                      # Frontend on port 5173
-
-# Pipeline (from CLI)
-npm run scraper                 # Scrape + score (LinkedIn + Greenhouse + Lever)
-npm run scraper:gmail-alerts    # Gmail alerts
-npm run scraper:rescore         # Re-evaluate scored jobs
-npm run scraper:phase4          # Auto-apply
+npm run eval:seed-rules          # canonical salary / experience / remote rules
+npm run eval:seed-demographics   # UserModel.demographics + paraphrase-friendly rules
 ```
 
-### Gmail Alerts
-
-1. Forward LinkedIn job alert emails to your Gmail
-2. Set `GMAIL_EMAIL` and `GMAIL_APP_PASSWORD` in `.env`
-3. Run "Gmail Alerts" from the pipeline UI
-
-### Rebuild Shared Package
-
-After modifying `packages/shared/`:
+### Rebuild shared (only after editing `packages/shared/`)
 
 ```bash
 npx tsc --project packages/shared/tsconfig.json
 ```
 
-## Database Collections
+### Run
 
-| Collection          | Purpose                                        |
-| ------------------- | ---------------------------------------------- |
-| `jobs`              | All scraped jobs with scores, status, metadata |
-| `coverletters`      | Generated cover letters linked to jobs         |
-| `users`             | Candidate profile (one document)               |
-| `profileanswers`    | Reusable form answer rules (question → answer) |
-| `questionanswers`   | Per-job Q&A logs from auto-apply               |
-| `applicationfields` | Pre-scraped form fields with answers per job   |
+```bash
+npm run api                     # NestJS API on port 3001
+npm run ui                      # Vite UI on port 5173
+
+# Individual phases from CLI:
+npm run scraper                 # Scrape + score (Ashby + Greenhouse + LinkedIn + Lever)
+npm run scraper:gmail-alerts    # Today's Gmail LinkedIn alerts
+npm run scraper:phase3          # Cover letters for to_apply jobs
+npm run scraper:phase4          # Auto-apply (honors the UI's Auto-submit toggle)
+```
+
+### Gmail alerts
+
+1. Forward LinkedIn job alerts to your Gmail (or let LinkedIn deliver to it directly)
+2. Set `GMAIL_EMAIL` and `GMAIL_APP_PASSWORD` (Gmail App Password, not account password)
+3. Run Gmail Alerts from the Pipeline UI or `npm run scraper:gmail-alerts`
+
+The scraper reads **today's emails only** (since local midnight) to avoid re-processing yesterday's alerts on every run.
+
+### Tests
+
+```bash
+npm test          # 132 unit tests across scraper fixtures — no LLM calls
+```
+
+Eval harnesses (`eval:*`) hit the live LLM and are NOT part of `npm test` — run them on demand.
+
+## Database collections
+
+| Collection          | Purpose                                                                 |
+| ------------------- | ----------------------------------------------------------------------- |
+| `jobs`              | All scraped jobs with scores, status, metadata, applied_at              |
+| `coverletters`      | Generated cover letters keyed by externalJobId                          |
+| `users`             | Candidate profile — one document. Includes `demographics` and `settings` |
+| `profileanswers`    | Reusable form answer rules (question_pattern → answer)                  |
+| `questionanswers`   | Per-job Q&A logs from auto-apply runs                                   |
+| `applicationfields` | Pre-scraped form fields with answers per job                            |

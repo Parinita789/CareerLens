@@ -135,6 +135,18 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     secure: true,
     auth: { user: email, pass: password },
     logger: false,
+    // Bail on a stuck TLS socket after 30s instead of letting it hang
+    // indefinitely. The error is delivered via promise rejection on the
+    // current operation AND via the 'error' EventEmitter event below.
+    socketTimeout: 30000,
+  });
+
+  // Critical: convert ImapFlow's EventEmitter 'error' event into a logged
+  // warning. Without this listener, an async socket timeout (e.g. TLS idle
+  // disconnect from Gmail's side) emits an unhandled 'error' which crashes
+  // the entire Node process — the symptom the user reported.
+  client.on('error', (err: any) => {
+    console.error(`  Gmail IMAP error event (continuing): ${err?.message ?? String(err)}`);
   });
 
   const allUrls: string[] = [];
@@ -212,8 +224,17 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     return [];
   }
 
+  // Soft cap per run — bursting through 200+ URLs in one go is what makes the
+  // laptop feel hung. Re-running the script catches up the rest, since URLs
+  // already saved to Mongo are skipped above.
+  const MAX_URLS_PER_RUN = 80;
+  if (allUrls.length > MAX_URLS_PER_RUN) {
+    console.log(`  Capping this run at ${MAX_URLS_PER_RUN} URLs (${allUrls.length - MAX_URLS_PER_RUN} deferred — run again later to pick them up)`);
+    allUrls.length = MAX_URLS_PER_RUN;
+  }
+
   // Scrape job details from LinkedIn
-  console.log(`  Scraping ${allUrls.length} job pages (5 in parallel)...`);
+  console.log(`  Scraping ${allUrls.length} job pages (2 in parallel)...`);
 
   const browser = await chromium.launch({
     headless: true,
@@ -230,6 +251,20 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
   });
 
+  // Block heavy resource types we don't need for text extraction. LinkedIn
+  // job pages drag in megabytes of profile photos, ad pixels, and webfonts —
+  // none of which affect page.title(), the description selectors, or
+  // body.innerText. Cuts per-page memory + bandwidth roughly in half.
+  // Allowed: document, script, xhr, fetch (DOM hydration still works).
+  // Blocked: image, font, media, stylesheet (purely cosmetic for our purpose).
+  await context.route('**/*', (route) => {
+    const type = route.request().resourceType();
+    if (type === 'image' || type === 'font' || type === 'media' || type === 'stylesheet') {
+      return route.abort();
+    }
+    return route.continue();
+  });
+
   // Load LinkedIn session
   const sessionFile = path.join(__dirname, '../../data/linkedin-session.json');
   if (fs.existsSync(sessionFile)) {
@@ -243,7 +278,11 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
   }
 
   const jobs: JobListing[] = [];
-  const PARALLEL = 5;
+  // Concurrency = 2 keeps RAM well under 1 GB and frees the laptop's CPU/IO for
+  // foreground work. 5 was reachable but pegged a typical 8-16 GB laptop into
+  // memory pressure (Chromium Helper processes + tracking pixels per LinkedIn
+  // page). Total wall time roughly doubles vs 5, but the laptop stays usable.
+  const PARALLEL = 2;
 
   // Scrape in parallel batches of 5
   for (let i = 0; i < allUrls.length; i += PARALLEL) {

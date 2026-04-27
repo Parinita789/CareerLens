@@ -69,8 +69,25 @@ export async function applyViaEasyApply(page: Page, job: ScoredJob, submit: bool
 
       if (submitBtn) {
         if (!submit) {
-          console.log('  Review step reached — SUBMIT DISABLED (dry-run). Form filled; stopping before click.');
-          return { success: false, reason: 'Submit disabled — review mode' };
+          console.log('  Review step reached — SUBMIT DISABLED (dry-run).');
+          console.log('  Window stays open. Click Submit manually to complete, or close the tab to move on.');
+          // Watch for the user to either submit manually (modal closes / confirmation appears)
+          // or close the tab. Up to 30 min.
+          const maxWait = 30 * 60 * 1000;
+          const start = Date.now();
+          while (Date.now() - start < maxWait) {
+            await sleep(2000);
+            if (page.isClosed()) {
+              return { success: false, reason: 'Page closed by user' };
+            }
+            // Success signal: modal gone + URL still on a LinkedIn job page.
+            const modalStillOpen = await page.$('.jobs-easy-apply-modal, [data-test-modal]').catch(() => null);
+            if (!modalStillOpen) {
+              console.log('  ✓ Easy Apply modal closed — assuming manual submit completed.');
+              return { success: true, method: 'easy_apply' };
+            }
+          }
+          return { success: false, reason: 'Review mode — timed out after 30 min' };
         }
         console.log('  Review step — submitting application...');
         await submitBtn.click();
