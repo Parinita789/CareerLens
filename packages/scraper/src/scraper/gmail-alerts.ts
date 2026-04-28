@@ -1,5 +1,5 @@
 import { ImapFlow } from 'imapflow';
-import { simpleParser } from 'mailparser';
+import { simpleParser, type ParsedMail } from 'mailparser';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -162,7 +162,10 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      const uids = await client.search({ since });
+      // imapflow's search() returns `false` when nothing matches — normalize
+      // to an empty array so the rest of the code can treat it uniformly.
+      const uidsResult = await client.search({ since });
+      const uids: number[] = Array.isArray(uidsResult) ? uidsResult : [];
       console.log(`  Found ${uids.length} emails since ${since.toLocaleDateString()}`);
 
       let emailCount = 0;
@@ -171,7 +174,10 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
         const messages = client.fetch(uids, { source: true });
 
         for await (const msg of messages) {
-          const parsed = await simpleParser(msg.source);
+          // msg.source can be undefined per the type; skip those rather than
+          // pass undefined to simpleParser (would throw at runtime anyway).
+          if (!msg.source) continue;
+          const parsed: ParsedMail = await simpleParser(msg.source);
           const html = parsed.html || parsed.textAsHtml || parsed.text || '';
           const urls = parseEmailForJobUrls(html as string);
 
@@ -209,11 +215,27 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
   if (allUrls.length === 0) return [];
 
   // Skip URLs already in the database
+  const linkedinIdOf = (u: string): string | null => {
+    const m = u.match(/linkedin\.com\/(?:comm\/)?jobs\/view\/(\d{7,})/i);
+    return m ? m[1] : null;
+  };
   if (existingUrls && existingUrls.size > 0) {
+    const existingIds = new Set<string>();
+    for (const u of existingUrls) {
+      const id = linkedinIdOf(u);
+      if (id) existingIds.add(id);
+    }
     const before = allUrls.length;
-    const filtered = allUrls.filter((u) => !existingUrls.has(u));
+    const filtered = allUrls.filter((u) => {
+      const id = linkedinIdOf(u);
+      // unknown URL form — keep, downstream dedup (company+title key) will handle it
+      if (!id) return true;
+      return !existingIds.has(id);
+    });
     if (before !== filtered.length) {
-      console.log(`  Skipped ${before - filtered.length} already-tracked URLs`);
+      console.log(
+        `  Skipped ${before - filtered.length} already-tracked URLs (by LinkedIn job ID)`,
+      );
     }
     allUrls.length = 0;
     allUrls.push(...filtered);
@@ -224,12 +246,11 @@ export async function fetchGmailAlerts(existingUrls?: Set<string>): Promise<JobL
     return [];
   }
 
-  // Soft cap per run — bursting through 200+ URLs in one go is what makes the
-  // laptop feel hung. Re-running the script catches up the rest, since URLs
-  // already saved to Mongo are skipped above.
   const MAX_URLS_PER_RUN = 80;
   if (allUrls.length > MAX_URLS_PER_RUN) {
-    console.log(`  Capping this run at ${MAX_URLS_PER_RUN} URLs (${allUrls.length - MAX_URLS_PER_RUN} deferred — run again later to pick them up)`);
+    console.log(
+      `  Capping this run at ${MAX_URLS_PER_RUN} URLs (${allUrls.length - MAX_URLS_PER_RUN} deferred — run again later to pick them up)`,
+    );
     allUrls.length = MAX_URLS_PER_RUN;
   }
 
