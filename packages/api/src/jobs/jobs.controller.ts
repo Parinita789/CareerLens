@@ -21,8 +21,11 @@ export class JobsController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() body: { status: string; reason?: string }) {
-    return this.jobsService.updateJobStatus(id, body.status, body.reason);
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string; reason?: string; interview_round?: string },
+  ) {
+    return this.jobsService.updateJobStatus(id, body.status, body.reason, body.interview_round);
   }
 
   @Post(':id/cover-letter')
@@ -31,7 +34,17 @@ export class JobsController {
   }
 
   @Post('manual')
-  async addManualJob(@Body() body: { title: string; company: string; url?: string; source?: string }) {
+  async addManualJob(
+    @Body()
+    body: {
+      title: string;
+      company: string;
+      url?: string;
+      source?: string;
+      status?: string;
+      interview_round?: string;
+    },
+  ) {
     return this.jobsService.addManualJob(body);
   }
 }

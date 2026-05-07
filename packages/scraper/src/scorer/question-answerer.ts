@@ -133,10 +133,34 @@ function demographicsBlock(profile: any): string {
   ].join('\n');
 }
 
-async function savedAnswersBlock(): Promise<string> {
+const SAVED_ANSWERS_PROMPT_CAP = 30;
+
+function tokenize(s: string): string[] {
+  return (s ?? '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+}
+
+async function savedAnswersBlock(question: string): Promise<string> {
   const rules = await ProfileAnswerModel.find().lean();
   if (rules.length === 0) return '(none)';
-  return rules.map((r: any) => `- "${r.question_pattern}": ${r.answer}`).join('\n');
+
+  if (rules.length <= SAVED_ANSWERS_PROMPT_CAP) {
+    return rules.map((r: any) => `- "${r.question_pattern}": ${r.answer}`).join('\n');
+  }
+
+  const qTokens = new Set(tokenize(question));
+  const scored = rules.map((r: any) => {
+    const ruleTokens = tokenize(`${r.question_pattern} ${r.answer}`);
+    let overlap = 0;
+    for (const t of ruleTokens) if (qTokens.has(t)) overlap++;
+    return { rule: r, score: overlap, len: (r.question_pattern ?? '').length };
+  });
+  scored.sort((a, b) => b.score - a.score || b.len - a.len);
+  const top = scored.slice(0, SAVED_ANSWERS_PROMPT_CAP);
+  return top.map((s) => `- "${s.rule.question_pattern}": ${s.rule.answer}`).join('\n');
 }
 
 export async function answerQuestion(
@@ -164,7 +188,7 @@ export async function answerQuestion(
   // for select/radio — pick best option
   if ((type === 'select' || type === 'radio') && options?.length) {
     const demographics = demographicsBlock(profile);
-    const saved = await savedAnswersBlock();
+    const saved = await savedAnswersBlock(question);
     const prompt = `
       Question: "${question}"
       Options: ${options.join(', ')}
@@ -196,7 +220,7 @@ export async function answerQuestion(
 
   // open-ended textarea (also used for text-type when no rule hit)
   const demographics = demographicsBlock(profile);
-  const saved = await savedAnswersBlock();
+  const saved = await savedAnswersBlock(question);
   const prompt = `
     Answer this job application question for the candidate.
     Be specific, 2-3 sentences max. Only use real experience from the profile.

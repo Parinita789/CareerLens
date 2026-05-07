@@ -1,5 +1,5 @@
 {
-  "$schema": "Each case: { name, job, expect, notes? }. `job` is a JobLike shape consumed by generateCoverLetter. See cover-letter-eval.ts for grading semantics.",
+  "$schema": "Each case: { name, job, expect, judge?, notes? }. `judge` opts the case into the LLM-as-judge rubric (specificity / metric_grounding / structure / tone / no_fabrication). See cover-letter-eval.ts and _judge.ts for grading semantics.",
   "cases": [
     {
       "name": "streaming-infra-role",
@@ -22,6 +22,7 @@
         ],
         "regex": "\\d+(K|%|[+])"
       },
+      "judge": { "minScore": 3 },
       "notes": "Must cite a concrete metric like 100K or 60%"
     },
     {
@@ -43,6 +44,7 @@
           "I would be a great fit", "resonates with", "I am eager"
         ]
       },
+      "judge": { "minScore": 3, "mustMention": ["agent", "Claude"] },
       "notes": "AI role triggers selectRelevantAchievements' isAIRole branch — letter should reference the AI agent achievement"
     },
     {
@@ -64,6 +66,7 @@
           "I would be a great fit", "resonates with"
         ]
       },
+      "judge": { "minScore": 3 },
       "notes": "Platform/leadership branch of selectRelevantAchievements"
     },
     {
@@ -85,6 +88,7 @@
           "I would be a great fit", "resonates with"
         ]
       },
+      "judge": { "minScore": 3 },
       "notes": "Default branch — no scale/AI/leadership signal in description"
     }
   ]

@@ -5,7 +5,14 @@ import * as dotenv from 'dotenv';
 import { applyViaEasyApply } from './apply/easy-apply';
 import { applyViaGreenhouse } from './apply/greenhouse-apply';
 import { probeLinkedInApplyTarget, classifyAts } from './apply/linkedin-probe';
-import { connectToDatabase, disconnectDatabase, loadExistingJobs, saveJob } from './db';
+import {
+  connectToDatabase,
+  disconnectDatabase,
+  loadExistingJobs,
+  saveJob,
+  resetAnswerSourceStats,
+  getAnswerSourceStats,
+} from './db';
 import type { ScoredJob } from './types';
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
@@ -14,6 +21,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   await connectToDatabase();
+  resetAnswerSourceStats();
 
   // Parse --platforms flag: e.g. --platforms=greenhouse,linkedin
   const platformsArg = process.argv.find((a) => a.startsWith('--platforms='));
@@ -366,6 +374,24 @@ async function main() {
   if (results.failed.length > 0) {
     console.log('\nFailed:');
     results.failed.forEach((f) => console.log(`  ! ${f.job} — ${f.reason}`));
+  }
+
+  // Per-run audit: where did the answers come from?
+  const stats = getAnswerSourceStats();
+  const total = stats.rule + stats.llm;
+  if (total > 0) {
+    const llmPct = Math.round((stats.llm / total) * 100);
+    console.log('\nAnswer source breakdown');
+    console.log('==============================');
+    console.log(`Rule-based: ${stats.rule}`);
+    console.log(`LLM:        ${stats.llm}  (${llmPct}% of ${total})`);
+    const perJobEntries = Object.entries(stats.perJob);
+    if (perJobEntries.length > 1) {
+      console.log('Per job:');
+      for (const [, p] of perJobEntries) {
+        console.log(`  ${p.title} @ ${p.company}: ${p.rule} rule / ${p.llm} llm`);
+      }
+    }
   }
 
   await disconnectDatabase();

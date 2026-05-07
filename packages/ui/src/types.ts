@@ -24,6 +24,7 @@ export interface ScoredJob {
   status: JobStatus;
   applied_at?: string;
   applied_via?: 'auto' | 'manual';
+  interview_round?: string;
   cover_letter?: string;
   notes?: string;
 }

@@ -178,8 +178,33 @@ async function callWithRetry(prompt: string): Promise<string> {
   });
 }
 
+function filterFabricatedMatches(
+  matched: unknown,
+  job: JobListing,
+): { kept: string[]; dropped: string[] } {
+  if (!Array.isArray(matched)) return { kept: [], dropped: [] };
+  const haystack = `${job.title} ${job.description}`.toLowerCase();
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (const skill of matched) {
+    if (typeof skill !== 'string' || skill.length === 0) continue;
+    if (haystack.includes(skill.toLowerCase())) kept.push(skill);
+    else dropped.push(skill);
+  }
+  return { kept, dropped };
+}
+
 export async function scoreFitWithLLM(job: JobListing): Promise<ScoreResult> {
   const prompt = buildScorerPrompt(job);
   const raw = await callWithRetry(prompt);
-  return safeParseJSON(raw);
+  const parsed = safeParseJSON(raw);
+
+  const { kept, dropped } = filterFabricatedMatches(parsed.matched_skills, job);
+  if (dropped.length > 0) {
+    console.log(
+      `    Dropped fabricated matched_skills (not in JD) for "${job.title}": ${dropped.join(', ')}`,
+    );
+  }
+  parsed.matched_skills = kept;
+  return parsed;
 }

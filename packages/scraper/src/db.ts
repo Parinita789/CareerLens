@@ -93,10 +93,39 @@ export async function loadAnswerRules(): Promise<Record<string, string>> {
   }, {});
 }
 
+// In-memory per-run audit of where Q&A answers came from. Phase 4 reads
+// these via getAnswerSourceStats at the end of a run to print a "X by rule,
+// Y by LLM" summary. Resets between runs via resetAnswerSourceStats.
+interface AnswerSourceStats {
+  rule: number;
+  llm: number;
+  perJob: Record<string, { rule: number; llm: number; title: string; company: string }>;
+}
+const _stats: AnswerSourceStats = { rule: 0, llm: 0, perJob: {} };
+
+export function resetAnswerSourceStats(): void {
+  _stats.rule = 0;
+  _stats.llm = 0;
+  _stats.perJob = {};
+}
+
+export function getAnswerSourceStats(): Readonly<AnswerSourceStats> {
+  return _stats;
+}
+
 export async function logQuestionAnswer(
   jobId: string, title: string, company: string,
   entry: { question: string; type: string; options?: string[]; answer: string; source: 'rule' | 'llm' },
 ): Promise<void> {
+  // Bump in-memory counters before any DB I/O so a Mongo failure doesn't
+  // lose the audit signal. Skip empty-answer logs (those are skips, not answers).
+  if (entry.answer && entry.answer.length > 0) {
+    _stats[entry.source]++;
+    const per = _stats.perJob[jobId] ?? { rule: 0, llm: 0, title, company };
+    per[entry.source]++;
+    _stats.perJob[jobId] = per;
+  }
+
   // Strip options if too many (country lists etc.) or contain phone codes
   const cleanEntry = { ...entry };
   if (cleanEntry.options) {

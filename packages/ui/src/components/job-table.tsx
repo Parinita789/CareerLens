@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { ScoredJob } from '../types';
+import { INTERVIEW_ROUNDS } from './app';
 
-type Tab = 'queue' | 'applied' | 'accepted' | 'declined' | 'rejected' | 'prepare';
+type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'declined' | 'rejected' | 'prepare';
 
 export type SortBy =
   | 'default'        // existing behavior: new-within-24h first, then by score
@@ -20,7 +21,7 @@ interface JobTableProps {
   onSelectJob: (job: ScoredJob) => void;
   onDismissJob?: (job: ScoredJob) => void;
   onMarkApplied?: (job: ScoredJob) => void;
-  onUpdateStatus?: (job: ScoredJob, status: string) => void;
+  onUpdateStatus?: (job: ScoredJob, status: string, interviewRound?: string) => void;
   onAutoApply?: (jobIds: string[]) => void;
   onGenerateCoverLetters?: (jobIds: string[]) => void;
   onCancelSelect?: () => void;
@@ -85,8 +86,8 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
   const tsOrZero = (s?: string) => (s ? new Date(s).getTime() : 0);
 
   const sorted = [...jobs].sort((a, b) => {
-    // Applied tab always sorts by applied_at desc — most actionable order.
-    if (activeTab === 'applied') {
+    // Applied + Interviewing tabs sort by applied_at desc — most actionable order.
+    if (activeTab === 'applied' || activeTab === 'interviewing') {
       return tsOrZero(b.applied_at) - tsOrZero(a.applied_at);
     }
     switch (sortBy) {
@@ -164,6 +165,9 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
           {activeTab === 'queue' && <th>Posted</th>}
           {activeTab === 'applied' && <th>Applied</th>}
           {activeTab === 'applied' && <th>Status</th>}
+          {activeTab === 'interviewing' && <th>Added</th>}
+          {activeTab === 'interviewing' && <th>Round</th>}
+          {activeTab === 'interviewing' && <th>Outcome</th>}
           {activeTab === 'rejected' && <th>Reason</th>}
           {activeTab === 'queue' && <th>Apply</th>}
           {activeTab === 'queue' && <th></th>}
@@ -251,6 +255,50 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
                   <option value="accepted">Accepted</option>
                   <option value="declined">Declined</option>
                   <option value="no_response">No Response</option>
+                </select>
+              </td>
+            )}
+            {activeTab === 'interviewing' && (
+              <td>
+                <span className="applied-date">
+                  {job.applied_at ? new Date(job.applied_at).toLocaleDateString() : '--'}
+                </span>
+              </td>
+            )}
+            {activeTab === 'interviewing' && (
+              <td>
+                <select
+                  className="status-dropdown"
+                  value={job.interview_round ?? INTERVIEW_ROUNDS[0]}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onUpdateStatus?.(job, 'interviewing', e.target.value);
+                  }}
+                >
+                  {INTERVIEW_ROUNDS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </td>
+            )}
+            {activeTab === 'interviewing' && (
+              <td>
+                <select
+                  className="status-dropdown"
+                  value="interviewing"
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onUpdateStatus?.(job, e.target.value);
+                  }}
+                  title="Move this role out of the Interviewing tab when an outcome is reached"
+                >
+                  <option value="interviewing">In Progress</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="declined">Declined</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="no_response">Ghosted</option>
                 </select>
               </td>
             )}

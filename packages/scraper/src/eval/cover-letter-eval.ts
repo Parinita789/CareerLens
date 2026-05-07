@@ -14,6 +14,7 @@ dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 import { connectToDatabase, disconnectDatabase } from '../db';
 import { generateCoverLetter } from '@job-agent/shared';
 import { grade, pad, preview, type Expect } from './_lib';
+import { judgeCoverLetter, type JudgeRubric } from './_judge';
 
 interface Case {
   name: string;
@@ -26,6 +27,7 @@ interface Case {
     reason?: string;
   };
   expect: Expect;
+  judge?: JudgeRubric;
   notes?: string;
 }
 
@@ -53,13 +55,25 @@ async function main() {
     const ms = Date.now() - t0;
     totalMs += ms;
 
-    const result = errorMsg
+    const programmatic = errorMsg
       ? { ok: false, reason: `ERROR: ${errorMsg}` }
       : grade(actual, c.expect);
 
+    let judgeNote = '';
+    let result = programmatic;
+    if (programmatic.ok && c.judge) {
+      const judged = await judgeCoverLetter(actual, c.job, c.judge);
+      judgeNote = ` | judge ${judged.score}/5`;
+      if (!judged.ok) {
+        result = { ok: false, reason: `judge: ${judged.reasons.join('; ')}` };
+      }
+    }
+
     const marker = result.ok ? '✓' : '✗';
     const msStr = `${ms.toString().padStart(6)}ms`;
-    console.log(`  ${marker} ${pad(c.name, 32)} ${msStr}   ${result.ok ? `${actual.length} chars — ${preview(actual)}` : result.reason}`);
+    console.log(
+      `  ${marker} ${pad(c.name, 32)} ${msStr}   ${result.ok ? `${actual.length} chars${judgeNote} — ${preview(actual)}` : result.reason}`,
+    );
 
     if (result.ok) passed++;
     else failures.push({ c, actual, reason: result.reason ?? 'unknown', ms });
@@ -67,14 +81,18 @@ async function main() {
 
   const pct = Math.round((passed / cases.length) * 100);
   const avgMs = Math.round(totalMs / cases.length);
-  console.log(`\n${cases.length} cases: ${passed} passed, ${failures.length} failed (${pct}%)  avg latency ${avgMs}ms\n`);
+  console.log(
+    `\n${cases.length} cases: ${passed} passed, ${failures.length} failed (${pct}%)  avg latency ${avgMs}ms\n`,
+  );
 
   if (failures.length > 0) {
     console.log('Failures:');
     for (const f of failures) {
       console.log(`  - ${f.c.name}: ${f.reason}`);
       console.log(`      job: "${f.c.job.title}" @ ${f.c.job.company}`);
-      console.log(`      actual (first 220 chars): "${(f.actual || '').slice(0, 220).replace(/\s+/g, ' ')}"`);
+      console.log(
+        `      actual (first 220 chars): "${(f.actual || '').slice(0, 220).replace(/\s+/g, ' ')}"`,
+      );
     }
     console.log('');
   }

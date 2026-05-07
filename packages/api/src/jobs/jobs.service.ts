@@ -25,12 +25,27 @@ export class JobsService {
     return { ...rest, id: (job as any).externalId };
   }
 
-  async updateJobStatus(id: string, status: string, reason?: string): Promise<any> {
+  async updateJobStatus(
+    id: string,
+    status: string,
+    reason?: string,
+    interviewRound?: string,
+  ): Promise<any> {
     const update: any = { status };
     if (reason) update.reason = reason;
     if (status === 'applied') {
       update.applied_at = new Date();
       update.applied_via = 'manual';
+    }
+    // Setting interview_round only makes sense when the job is actively in
+    // interviewing state. Leaving status alone keeps the existing round.
+    if (status === 'interviewing' && interviewRound !== undefined) {
+      update.interview_round = interviewRound;
+    }
+    // Moving out of interviewing — clear the round so it doesn't linger on
+    // accepted/declined/rejected jobs.
+    if (status !== 'interviewing' && status !== 'applied') {
+      update.interview_round = null;
     }
 
     const job = await JobModel.findOneAndUpdate(
@@ -101,8 +116,19 @@ export class JobsService {
     return { cover_letter: content };
   }
 
-  async addManualJob(data: { title: string; company: string; url?: string; source?: string }): Promise<any> {
+  async addManualJob(data: {
+    title: string;
+    company: string;
+    url?: string;
+    source?: string;
+    status?: string;
+    interview_round?: string;
+  }): Promise<any> {
     const id = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const allowed = ['applied', 'interviewing', 'accepted', 'declined'];
+    const status = allowed.includes(data.status ?? '') ? (data.status as string) : 'applied';
+    // applied_at is the day the user tracked the role; useful for accepted/
+    // interviewing entries too so they sort correctly on those tabs.
     const job = await JobModel.create({
       externalId: id,
       title: data.title,
@@ -116,9 +142,10 @@ export class JobsService {
       matched_skills: [],
       missing_skills: [],
       reason: 'Manually added',
-      status: 'applied',
+      status,
       applied_at: new Date(),
       applied_via: 'manual',
+      interview_round: status === 'interviewing' ? data.interview_round || null : null,
       scraped_at: new Date(),
     });
     const { _id, __v, ...rest } = job.toObject();
