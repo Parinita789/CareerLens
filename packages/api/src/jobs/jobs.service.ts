@@ -30,6 +30,7 @@ export class JobsService {
     status: string,
     reason?: string,
     interviewRound?: string,
+    acceptedOutcome?: string,
   ): Promise<any> {
     const update: any = { status };
     if (reason) update.reason = reason;
@@ -46,6 +47,14 @@ export class JobsService {
     // accepted/declined/rejected jobs.
     if (status !== 'interviewing' && status !== 'applied') {
       update.interview_round = null;
+    }
+    // Same shape as interview_round: only persist when in accepted state, and
+    // wipe it on transitions away so stale outcomes don't follow the job.
+    if (status === 'accepted' && acceptedOutcome !== undefined) {
+      update.accepted_outcome = acceptedOutcome;
+    }
+    if (status !== 'accepted') {
+      update.accepted_outcome = null;
     }
 
     const job = await JobModel.findOneAndUpdate(
@@ -123,6 +132,7 @@ export class JobsService {
     source?: string;
     status?: string;
     interview_round?: string;
+    accepted_outcome?: string;
   }): Promise<any> {
     const id = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const allowed = ['applied', 'interviewing', 'accepted', 'declined'];
@@ -146,6 +156,7 @@ export class JobsService {
       applied_at: new Date(),
       applied_via: 'manual',
       interview_round: status === 'interviewing' ? data.interview_round || null : null,
+      accepted_outcome: status === 'accepted' ? data.accepted_outcome || null : null,
       scraped_at: new Date(),
     });
     const { _id, __v, ...rest } = job.toObject();

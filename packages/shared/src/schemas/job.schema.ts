@@ -29,6 +29,7 @@ const jobSchema = new mongoose.Schema(
     applied_at:        { type: Date, default: null },
     applied_via:       { type: String, enum: ['auto', 'manual'], default: null },
     interview_round:   { type: String, default: null },
+    accepted_outcome:  { type: String, default: null },
     notes:             { type: String, default: '' },
   },
   { timestamps: true }

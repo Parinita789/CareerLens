@@ -1,28 +1,14 @@
-import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { execFile } from 'child_process';
 
-type LLMProvider = 'claude-cli' | 'ollama' | 'anthropic';
+type LLMProvider = 'claude-cli' | 'anthropic';
 
 function getProvider(): LLMProvider {
-  return (process.env.LLM_PROVIDER as LLMProvider) || 'ollama';
+  return (process.env.LLM_PROVIDER as LLMProvider) || 'claude-cli';
 }
 
 export function isDevMode(): boolean {
   return process.env.NODE_ENV !== 'production';
-}
-
-// ── Ollama (local LLM) ──
-let _ollamaClient: OpenAI | null = null;
-
-export function getOllamaClient(): OpenAI {
-  if (!_ollamaClient) {
-    _ollamaClient = new OpenAI({
-      baseURL: process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1',
-      apiKey: 'ollama',
-    });
-  }
-  return _ollamaClient;
 }
 
 // ── Anthropic (Claude API) ──
@@ -81,21 +67,6 @@ export async function llmChat(prompt: string, options?: {
     const codeBlockMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (codeBlockMatch) return codeBlockMatch[1].trim();
     return result;
-  }
-
-  if (provider === 'ollama') {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-    if (system) messages.push({ role: 'system', content: system });
-    messages.push({ role: 'user', content: prompt });
-
-    const res = await getOllamaClient().chat.completions.create({
-      model: process.env.OLLAMA_MODEL || 'llama3:latest',
-      messages,
-      temperature,
-      ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
-    });
-
-    return res.choices[0].message.content!.trim();
   }
 
   // anthropic

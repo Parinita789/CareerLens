@@ -25,6 +25,7 @@ export interface ScoredJob {
   applied_at?: string;
   applied_via?: 'auto' | 'manual';
   interview_round?: string;
+  accepted_outcome?: string;
   cover_letter?: string;
   notes?: string;
 }

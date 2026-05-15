@@ -36,6 +36,18 @@ export const INTERVIEW_ROUNDS = [
   'Other',
 ] as const;
 
+// Outcomes for the Accepted tab — "accepted" here means the *application* was
+// accepted (company moved you forward); these track what happened next.
+export const ACCEPTED_OUTCOMES = [
+  'Pending',
+  'Offer Received',
+  'Offer Accepted',
+  'Offer Declined',
+  'Withdrew',
+  'Position Closed',
+  'Ghosted',
+] as const;
+
 export function App() {
   const [activeTab, setActiveTab] = useState<Tab>('queue');
   const [jobs, setJobs] = useState<ScoredJob[]>([]);
@@ -66,11 +78,13 @@ export function App() {
     company: string;
     url: string;
     round: string;
+    outcome: string;
   }>({
     title: '',
     company: '',
     url: '',
     round: INTERVIEW_ROUNDS[0],
+    outcome: ACCEPTED_OUTCOMES[0],
   });
   const [sortBy, setSortBy] = useState<SortBy>('default');
   // Global "allow bot to submit applications" toggle, persisted in UserModel.settings.
@@ -188,10 +202,16 @@ export function App() {
   }, []);
 
   const handleUpdateStatus = useCallback(
-    async (job: ScoredJob, status: string, interviewRound?: string) => {
+    async (
+      job: ScoredJob,
+      status: string,
+      interviewRound?: string,
+      acceptedOutcome?: string,
+    ) => {
       try {
         const body: any = { status };
         if (interviewRound !== undefined) body.interview_round = interviewRound;
+        if (acceptedOutcome !== undefined) body.accepted_outcome = acceptedOutcome;
         await axios.patch(`/api/jobs/${job.id}/status`, body);
         setJobs((prev) =>
           prev.map((j) =>
@@ -201,6 +221,8 @@ export function App() {
                   status: status as any,
                   interview_round:
                     status === 'interviewing' ? (interviewRound ?? j.interview_round) : undefined,
+                  accepted_outcome:
+                    status === 'accepted' ? (acceptedOutcome ?? j.accepted_outcome) : undefined,
                 }
               : j,
           ),
@@ -522,7 +544,13 @@ export function App() {
         (() => {
           const closeModal = () => {
             setAddJobMode(null);
-            setNewJob({ title: '', company: '', url: '', round: INTERVIEW_ROUNDS[0] });
+            setNewJob({
+              title: '',
+              company: '',
+              url: '',
+              round: INTERVIEW_ROUNDS[0],
+              outcome: ACCEPTED_OUTCOMES[0],
+            });
           };
           const heading =
             addJobMode === 'interviewing'
@@ -577,6 +605,19 @@ export function App() {
                       ))}
                     </select>
                   )}
+                  {addJobMode === 'accepted' && (
+                    <select
+                      className="status-dropdown"
+                      value={newJob.outcome}
+                      onChange={(e) => setNewJob({ ...newJob, outcome: e.target.value })}
+                    >
+                      {ACCEPTED_OUTCOMES.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <div className="add-job-actions">
                     <button className="prepare-cancel-btn" onClick={closeModal}>
                       Cancel
@@ -594,6 +635,9 @@ export function App() {
                           };
                           if (addJobMode === 'interviewing') {
                             payload.interview_round = newJob.round;
+                          }
+                          if (addJobMode === 'accepted') {
+                            payload.accepted_outcome = newJob.outcome;
                           }
                           await axios.post('/api/jobs/manual', payload);
                           closeModal();

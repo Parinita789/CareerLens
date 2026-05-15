@@ -4,7 +4,48 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { ApplicationFieldsModel } from '@job-agent/shared';
 import { TARGET_COMPANIES } from './company-list';
+import { probeLinkedInApplyTarget, classifyAts } from '../apply/linkedin-probe';
 import type { ScoredJob } from '../types';
+
+// Diagnostic outcome of resolving a job's URL to a scrapable apply page.
+// Returned alongside the resolved URL (or null) so the caller can log a
+// specific reason when nothing makes it to applicationFields. Previously the
+// scraper silently dropped LinkedIn / unsupported jobs — those were the bulk
+// of high-score jobs not landing in the Prepare tab.
+type ResolveOutcome =
+  | { kind: 'ok'; url: string }
+  | { kind: 'easy_apply' }
+  | { kind: 'unsupported_host'; host: string }
+  | { kind: 'probe_failed'; reason: string };
+
+async function resolveApplyUrl(
+  context: BrowserContext,
+  job: ScoredJob,
+): Promise<ResolveOutcome> {
+  if (job.source === 'greenhouse') {
+    return { kind: 'ok', url: getGreenhouseUrl(job) || job.url };
+  }
+  if (job.source !== 'linkedin') {
+    // Ashby / Lever / Indeed / manual — try the URL as-is. The form scraper's
+    // existing iframe-traversal logic still gets a shot at it.
+    return { kind: 'ok', url: job.url };
+  }
+
+  // LinkedIn URLs (/jobs/view/...) aren't application forms — they're the
+  // posting page. Use the same probe phase 4 uses to resolve the underlying
+  // ATS URL, then route Greenhouse/Ashby targets into the form scraper.
+  const probePage = await context.newPage();
+  try {
+    const probe = await probeLinkedInApplyTarget(probePage, job.url);
+    if (probe.kind === 'easy_apply') return { kind: 'easy_apply' };
+    if (probe.kind === 'unknown') return { kind: 'probe_failed', reason: probe.reason };
+    const ats = classifyAts(probe.url);
+    if (ats === 'unsupported') return { kind: 'unsupported_host', host: probe.host };
+    return { kind: 'ok', url: probe.url };
+  } finally {
+    await probePage.close().catch(() => null);
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -31,12 +72,27 @@ function getGreenhouseUrl(job: ScoredJob): string | null {
   return `https://job-boards.greenhouse.io/${slug}/jobs/${jobId}`;
 }
 
-async function scrapeFormFields(context: BrowserContext, job: ScoredJob): Promise<ScrapedField[]> {
-  const page = await context.newPage();
+interface ScrapeResult {
+  fields: ScrapedField[];
+  // Non-ok outcomes carry a reason the caller can surface so the user knows
+  // why a high-score job didn't make it into applicationFields.
+  outcome: ResolveOutcome | { kind: 'no_form' } | { kind: 'scrape_error'; reason: string };
+}
+
+async function scrapeFormFields(
+  context: BrowserContext,
+  job: ScoredJob,
+): Promise<ScrapeResult> {
   const fields: ScrapedField[] = [];
 
+  const resolved = await resolveApplyUrl(context, job);
+  if (resolved.kind !== 'ok') {
+    return { fields, outcome: resolved };
+  }
+
+  const page = await context.newPage();
   try {
-    const url = job.source === 'greenhouse' ? (getGreenhouseUrl(job) || job.url) : job.url;
+    const url = resolved.url;
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await sleep(1500);
 
@@ -296,12 +352,13 @@ async function scrapeFormFields(context: BrowserContext, job: ScoredJob): Promis
     fields.length = 0;
     fields.push(...filtered);
   } catch (err) {
-    console.log(`    Form scrape failed: ${(err as Error).message}`);
-  } finally {
     await page.close().catch(() => {});
+    return { fields, outcome: { kind: 'scrape_error', reason: (err as Error).message } };
   }
+  await page.close().catch(() => {});
 
-  return fields;
+  if (fields.length === 0) return { fields, outcome: { kind: 'no_form' } };
+  return { fields, outcome: { kind: 'ok', url: resolved.url } };
 }
 
 /**
@@ -309,7 +366,10 @@ async function scrapeFormFields(context: BrowserContext, job: ScoredJob): Promis
  */
 export async function scrapeApplicationForms(
   jobs: ScoredJob[],
-  parallel: number = 5,
+  // Lowered from 5 → 3 because LinkedIn jobs now run an Apply-button probe
+  // (popup capture + redirect chain). Five concurrent LinkedIn popups was
+  // tripping rate limits on the scrape session.
+  parallel: number = 3,
 ): Promise<void> {
   if (jobs.length === 0) return;
 
@@ -347,17 +407,27 @@ export async function scrapeApplicationForms(
     const results = await Promise.all(
       batch.map(async (job) => {
         try {
-          const fields = await scrapeFormFields(context, job);
-          return { job, fields };
-        } catch {
-          return { job, fields: [] };
+          const r = await scrapeFormFields(context, job);
+          return { job, ...r };
+        } catch (err) {
+          return {
+            job,
+            fields: [] as ScrapedField[],
+            outcome: { kind: 'scrape_error', reason: (err as Error).message } as const,
+          };
         }
       }),
     );
 
-    for (const { job, fields } of results) {
-      if (fields.length === 0) {
-        console.log(`    ○ ${job.company} — no form found`);
+    for (const { job, fields, outcome } of results) {
+      if (outcome.kind !== 'ok' || fields.length === 0) {
+        const why =
+          outcome.kind === 'easy_apply'        ? 'LinkedIn Easy Apply (no pre-scrape possible)' :
+          outcome.kind === 'unsupported_host'  ? `external host ${outcome.host} not supported` :
+          outcome.kind === 'probe_failed'      ? `LinkedIn probe failed: ${outcome.reason}` :
+          outcome.kind === 'scrape_error'      ? `scrape error: ${outcome.reason}` :
+                                                  'no form found';
+        console.log(`    ○ ${job.company} [${job.source}] — ${why}`);
         continue;
       }
 

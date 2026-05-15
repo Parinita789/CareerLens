@@ -2,6 +2,14 @@ node_modules/
 dist/
 *.js.map
 *.d.ts.map
+# tsc -b emits .js + .d.ts next to .ts source — never want those committed.
+# Scoped to packages/*/src so legitimate .js config files at repo root are unaffected.
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+# Same emit problem for .ts config files (vite.config.ts, vitest.config.ts).
+*.config.js
+*.config.d.ts
+*.tsbuildinfo
 .env
 *.local
 .claude

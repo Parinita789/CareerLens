@@ -1,33 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { UserModel } from '@job-agent/shared';
+import { UserModel, llmChat } from '@job-agent/shared';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const pdfParse = require('pdf-parse');
 const RESUME_DIR = path.resolve(__dirname, '../../../scraper/data/resume');
-
-// Direct HTTP call to Ollama — bypasses Claude CLI overhead entirely
-async function callOllamaDirectly(prompt: string): Promise<string> {
-  const baseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/v1';
-  const model = process.env.OLLAMA_MODEL || 'llama3:latest';
-
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: 'Respond with ONLY valid JSON. No markdown, no explanation.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-    }),
-  });
-
-  const data = (await response.json()) as any;
-  return data.choices[0].message.content.trim();
-}
 
 @Injectable()
 export class ProfileService {
@@ -86,7 +63,11 @@ export class ProfileService {
     const startTime = Date.now();
     let responseText: string;
     try {
-      responseText = await callOllamaDirectly(prompt);
+      responseText = await llmChat(prompt, {
+        system: 'Respond with ONLY valid JSON. No markdown, no explanation.',
+        jsonMode: true,
+        maxTokens: 4096,
+      });
     } catch (err) {
       console.error('[Resume] LLM failed:', (err as Error).message);
       throw new Error(`Resume parsing failed: ${(err as Error).message}`);
