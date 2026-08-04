@@ -200,7 +200,11 @@ Greenhouse forms always have a phone country code picker in the DOM. A generic `
 
 ### Cover letter generation lives in `@job-agent/shared`
 
-Used to spawn `npx tsx generate-one-cover-letter.ts` per call (~5s overhead). Now imported in-process by the API. Single reference letter (down from 3), deduplicated banned-phrases list, `claude-sonnet-4-6` (down from Opus). End-to-end ~10–15s.
+Used to spawn `npx tsx generate-one-cover-letter.ts` per call (~5s overhead). Now imported
+in-process by the API. Two sequential LLM calls per letter: a draft (voice exemplars from
+`packages/shared/voice/samples/` + a seeded structural variant, replacing the old fixed
+3-paragraph template) followed by a humanize pass that rewrites it against explicit
+anti-AI-tell rules.
 
 ### Required-field detection
 

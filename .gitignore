@@ -18,3 +18,5 @@ packages/*/src/**/*.d.ts
 log.txt
 packages/scraper/data/
 packages/scraper/profile/candidate.json
+packages/shared/voice/samples/*
+!packages/shared/voice/samples/README.md
