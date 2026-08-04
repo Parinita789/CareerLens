@@ -29,6 +29,12 @@ function callClaudeCli(prompt: string, system?: string): Promise<string> {
     const fullPrompt = system ? `${system}\n\n${prompt}` : prompt;
     const claudePath = process.env.CLAUDE_CLI_PATH || 'claude';
 
+    // The CLI's own claude.ai login auth takes precedence over ANTHROPIC_API_KEY only when
+    // that var is absent from its env — an invalid/expired key here would otherwise silently
+    // override working login-based auth and break every call.
+    const childEnv = { ...process.env };
+    delete childEnv.ANTHROPIC_API_KEY;
+
     const child = execFile(claudePath, [
       '-p', fullPrompt,
       '--output-format', 'text',
@@ -37,10 +43,10 @@ function callClaudeCli(prompt: string, system?: string): Promise<string> {
     ], {
       maxBuffer: 1024 * 1024,
       timeout: 120000,
-      env: { ...process.env },
+      env: childEnv,
     }, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(`Claude CLI failed: ${error.message}`));
+        reject(new Error(`Claude CLI failed: ${error.message}${stderr ? ` | stderr: ${stderr.trim()}` : ''}`));
         return;
       }
       resolve(stdout.trim());
