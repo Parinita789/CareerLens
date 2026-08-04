@@ -48,7 +48,8 @@ async function main() {
     let actual = '';
     let errorMsg = '';
     try {
-      actual = await generateCoverLetter(c.job as any);
+      const result = await generateCoverLetter(c.job as any);
+      actual = result.final;
     } catch (err) {
       errorMsg = (err as Error).message;
     }

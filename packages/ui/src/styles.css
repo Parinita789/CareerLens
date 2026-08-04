@@ -841,6 +841,35 @@ h1 {
   background: var(--accent-glow);
 }
 
+.letter-version-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.version-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.version-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.version-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent-hover);
+}
+
 .modal-section h3 {
   font-size: 12px;
   font-weight: 700;

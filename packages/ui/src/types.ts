@@ -27,6 +27,7 @@ export interface ScoredJob {
   interview_round?: string;
   accepted_outcome?: string;
   cover_letter?: string;
+  cover_letter_raw?: string;
   notes?: string;
 }
 

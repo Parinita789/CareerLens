@@ -35,7 +35,7 @@ export async function saveJobs(jobs: ScoredJob[]): Promise<void> {
   await JobModel.bulkWrite(ops);
 }
 
-export async function saveCoverLetter(externalJobId: string, content: string): Promise<void> {
+export async function saveCoverLetter(externalJobId: string, content: string, rawContent?: string): Promise<void> {
   const job = await JobModel.findOne({ externalId: externalJobId });
   await CoverLetterModel.findOneAndUpdate(
     { externalJobId },
@@ -43,6 +43,7 @@ export async function saveCoverLetter(externalJobId: string, content: string): P
       $set: {
         jobId: job?._id,
         content,
+        ...(rawContent !== undefined ? { rawContent } : {}),
         generatedAt: new Date(),
       },
     },

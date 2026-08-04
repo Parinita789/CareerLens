@@ -26,19 +26,24 @@ export function JobDetail({ job, onClose, onJobUpdate }: JobDetailProps) {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
 
   const handleGenerateCoverLetter = async () => {
     setGenerating(true);
     setError(null);
     try {
-      const { data } = await axios.post<{ cover_letter: string }>(`/api/jobs/${job.id}/cover-letter`);
-      onJobUpdate({ ...job, cover_letter: data.cover_letter });
+      const { data } = await axios.post<{ cover_letter: string; cover_letter_raw?: string }>(`/api/jobs/${job.id}/cover-letter`);
+      setShowRaw(false);
+      onJobUpdate({ ...job, cover_letter: data.cover_letter, cover_letter_raw: data.cover_letter_raw });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to generate cover letter');
     } finally {
       setGenerating(false);
     }
   };
+
+  const hasRawVersion = !!job.cover_letter_raw && job.cover_letter_raw !== job.cover_letter;
+  const displayedLetter = showRaw && hasRawVersion ? job.cover_letter_raw! : job.cover_letter;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -109,11 +114,27 @@ export function JobDetail({ job, onClose, onJobUpdate }: JobDetailProps) {
           <h3>Cover Letter</h3>
           {job.cover_letter ? (
             <div className="cover-letter-block">
-              <pre>{job.cover_letter}</pre>
+              {hasRawVersion && (
+                <div className="letter-version-toggle">
+                  <button
+                    className={`version-btn${!showRaw ? ' active' : ''}`}
+                    onClick={() => setShowRaw(false)}
+                  >
+                    Final
+                  </button>
+                  <button
+                    className={`version-btn${showRaw ? ' active' : ''}`}
+                    onClick={() => setShowRaw(true)}
+                  >
+                    Raw draft
+                  </button>
+                </div>
+              )}
+              <pre>{displayedLetter}</pre>
               <button
                 className="copy-icon-btn"
                 title={copied ? 'Copied!' : 'Copy to clipboard'}
-                onClick={() => { navigator.clipboard.writeText(job.cover_letter!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                onClick={() => { navigator.clipboard.writeText(displayedLetter!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
               >
                 {copied ? '✓' : '⎘'}
               </button>

@@ -19,6 +19,9 @@ export class JobsService {
     const coverLetter = await CoverLetterModel.findOne({ externalJobId: id }).sort({ generatedAt: -1 }).lean();
     if (coverLetter) {
       (job as any).cover_letter = coverLetter.content;
+      if ((coverLetter as any).rawContent) {
+        (job as any).cover_letter_raw = (coverLetter as any).rawContent;
+      }
     }
 
     const { _id, __v, ...rest } = job as any;
@@ -106,7 +109,7 @@ export class JobsService {
       .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime());
   }
 
-  async generateCoverLetter(id: string): Promise<{ cover_letter: string }> {
+  async generateCoverLetter(id: string): Promise<{ cover_letter: string; cover_letter_raw: string }> {
     if (!/^[a-zA-Z0-9_\-]+$/.test(id)) {
       throw new Error('Invalid job ID format');
     }
@@ -114,15 +117,15 @@ export class JobsService {
     const job = await JobModel.findOne({ externalId: id }).lean();
     if (!job) throw new NotFoundException(`Job ${id} not found`);
 
-    const content = await generateCoverLetterShared(job as any);
+    const { raw, final } = await generateCoverLetterShared(job as any);
 
     await CoverLetterModel.findOneAndUpdate(
       { externalJobId: id },
-      { $set: { jobId: (job as any)._id, content, generatedAt: new Date() } },
+      { $set: { jobId: (job as any)._id, content: final, rawContent: raw, generatedAt: new Date() } },
       { upsert: true },
     );
 
-    return { cover_letter: content };
+    return { cover_letter: final, cover_letter_raw: raw };
   }
 
   async addManualJob(data: {
