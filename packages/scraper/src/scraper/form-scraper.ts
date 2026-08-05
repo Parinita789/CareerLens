@@ -437,19 +437,12 @@ export async function scrapeApplicationForms(
       const unknownCount = answered.filter((f) => f.source === 'unknown' && f.type !== 'file' && f.required).length;
       const status = unknownCount === 0 ? 'ready' : 'needs_review';
 
-      // Generate cover letter for 7+ jobs
+      // Use an existing (manually-generated) cover letter if there is one — never generate one here.
       let coverLetter = '';
       const { CoverLetterModel } = await import('../db');
       const existingCL = await CoverLetterModel.findOne({ externalJobId: job.id }).lean().catch(() => null);
       if (existingCL) {
         coverLetter = (existingCL as any).content || '';
-      } else {
-        try {
-          const { generateCoverLetter } = await import('../cover-letter/cover-letter');
-          coverLetter = await generateCoverLetter(job);
-          const { saveCoverLetter } = await import('../db');
-          await saveCoverLetter(job.id, coverLetter);
-        } catch { /* skip */ }
       }
 
       await ApplicationFieldsModel.findOneAndUpdate(

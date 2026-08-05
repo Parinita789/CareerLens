@@ -244,14 +244,6 @@ export function App() {
     }
   }, []);
 
-  const handleGenerateCoverLetters = useCallback(async (jobIds: string[]) => {
-    try {
-      await axios.post('/api/pipeline/generate-cover-letters', { jobIds });
-    } catch (err) {
-      console.error('Failed to start cover letter generation:', err);
-    }
-  }, []);
-
   // Split by status FIRST — these arrays drive the tab badge counts and must
   // reflect totals, not the currently-applied filter (otherwise filtering on
   // Queue makes the Applied/Accepted badges shrink too).
@@ -489,10 +481,6 @@ export function App() {
             onUpdateStatus={handleUpdateStatus}
             onAutoApply={(ids) => {
               handleAutoApply(ids);
-              setAutoApplyMode(false);
-            }}
-            onGenerateCoverLetters={(ids) => {
-              handleGenerateCoverLetters(ids);
               setAutoApplyMode(false);
             }}
             onCancelSelect={() => setAutoApplyMode(false)}

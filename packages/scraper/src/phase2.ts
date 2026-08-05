@@ -20,8 +20,7 @@ import type { JobListing, ScoredJob } from './types';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LLM_CONCURRENCY = 3;
-const MAX_JOB_AGE_DAYS = 10;
-
+const MAX_JOB_AGE_DAYS = 14;
 // Skip postings older than MAX_JOB_AGE_DAYS. Jobs with no posted_at pass through —
 function isFresh(postedAt?: string): boolean {
   if (!postedAt) return true;

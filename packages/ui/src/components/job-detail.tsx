@@ -109,7 +109,7 @@ export function JobDetail({ job, onClose, onJobUpdate }: JobDetailProps) {
           <p>{job.reason}</p>
         </div>
 
-        {!['rejected', 'declined'].includes(job.status) && (
+        {job.status !== 'rejected' && (
         <div className="modal-section">
           <h3>Cover Letter</h3>
           {job.cover_letter ? (

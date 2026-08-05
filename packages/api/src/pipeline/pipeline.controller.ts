@@ -34,12 +34,6 @@ export class PipelineController {
     return { message: 'Pipeline started' };
   }
 
-  @Post('generate-cover-letters')
-  async generateCoverLetters(@Body() body: { jobIds: string[] }) {
-    await this.pipelineService.runSelectedPhases(['cover-letters'], undefined, undefined, undefined, body.jobIds);
-    return { message: `Generating cover letters for ${body.jobIds.length} jobs` };
-  }
-
   @Post('auto-apply')
   async autoApply(@Body() body: { jobIds: string[] }) {
     await this.pipelineService.runSelectedPhases(['apply'], undefined, undefined, undefined, body.jobIds);

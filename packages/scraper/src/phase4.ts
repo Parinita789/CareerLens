@@ -136,29 +136,6 @@ async function main() {
     process.exit(0);
   });
 
-  // Only generate cover letters if they don't already exist (pre-scraped jobs already have them)
-  const { CoverLetterModel } = await import('./db');
-  const coverLetterPromise = (async () => {
-    for (const job of toApply) {
-      // Check pre-scraped data first (already has cover letter)
-      const preFilled = await ApplicationFieldsModel.findOne({ externalJobId: job.id }).lean().catch(() => null);
-      if ((preFilled as any)?.coverLetter) continue;
-      // Check cover letter collection
-      const existing = await CoverLetterModel.findOne({ externalJobId: job.id }).lean().catch(() => null);
-      if (existing) continue;
-      // Generate only if missing everywhere
-      try {
-        const { generateCoverLetter } = await import('./cover-letter/cover-letter');
-        const cl = await generateCoverLetter(job);
-        const { saveCoverLetter } = await import('./db');
-        await saveCoverLetter(job.id, cl);
-        console.log(`  ✓ Cover letter ready: ${job.company}`);
-      } catch {
-        console.log(`  ✗ Cover letter failed: ${job.company}`);
-      }
-    }
-  })();
-
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     viewport: null, // use full window size (--start-maximized)
@@ -350,8 +327,6 @@ async function main() {
     }
   }
 
-  // Wait for any remaining cover letter generation
-  await coverLetterPromise.catch(() => {});
   await browser.close();
 
   console.log('\n==============================');

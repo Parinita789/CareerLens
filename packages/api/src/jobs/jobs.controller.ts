@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Param, Body } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 
 @Controller('jobs')
@@ -43,6 +43,18 @@ export class JobsController {
   @Post(':id/cover-letter')
   async generateCoverLetter(@Param('id') id: string) {
     return this.jobsService.generateCoverLetter(id);
+  }
+
+  @Put(':id/cover-letter')
+  async updateCoverLetter(@Param('id') id: string, @Body() body: { content: string }) {
+    return this.jobsService.updateCoverLetter(id, body.content);
+  }
+
+  @Post('adhoc-cover-letter')
+  async createAdhocCoverLetter(
+    @Body() body: { description: string; title?: string; company?: string },
+  ) {
+    return this.jobsService.createAdhocCoverLetter(body);
   }
 
   @Post('manual')

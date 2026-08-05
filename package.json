@@ -10,8 +10,6 @@
   ],
   "scripts": {
     "scraper": "npm run dev -w packages/scraper",
-    "scraper:phase3": "npm run phase3 -w packages/scraper",
-    "scraper:phase3:force": "npm run phase3:force -w packages/scraper",
     "scraper:gmail-alerts": "npx tsx packages/scraper/src/phase-gmail-alerts.ts --watch --interval=60",
     "scraper:phase4": "npm run phase4 -w packages/scraper",
     "api": "NODE_ENV=development npm run start:dev -w packages/api",

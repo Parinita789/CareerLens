@@ -1,5 +1,5 @@
 {
-  "$schema": "Each case: { name, job, expect, judge?, notes? }. `judge` opts the case into the LLM-as-judge rubric (specificity / metric_grounding / structure / tone / no_fabrication). See cover-letter-eval.ts and _judge.ts for grading semantics.",
+  "$schema": "Each case: { name, job, expect, judge?, notes? }. `judge` opts the case into the LLM-as-judge rubric (specificity / metric_grounding / structure / tone / no_fabrication / voice_match). See cover-letter-eval.ts and _judge.ts for grading semantics.",
   "cases": [
     {
       "name": "streaming-infra-role",
@@ -18,7 +18,9 @@
         "notIncludes": [
           "I am thrilled", "I am excited", "I am passionate", "I am confident",
           "I would be a great fit", "resonates with", "I am eager",
-          "honed my skills", "ideal candidate"
+          "honed my skills", "ideal candidate",
+          "genuinely hard", "novelty layer", "bolted onto",
+          "reliability isn't optional", "multi-step agentic workflows"
         ],
         "regex": "\\d+(K|%|[+])"
       },
@@ -41,7 +43,9 @@
         "includes": ["Dear Hiring Manager,", "Anthropic"],
         "notIncludes": [
           "I am thrilled", "I am excited", "I am passionate",
-          "I would be a great fit", "resonates with", "I am eager"
+          "I would be a great fit", "resonates with", "I am eager",
+          "genuinely hard", "novelty layer", "bolted onto",
+          "reliability isn't optional", "multi-step agentic workflows"
         ]
       },
       "judge": { "minScore": 3, "mustMention": ["agent", "Claude"] },
@@ -63,7 +67,9 @@
         "includes": ["Dear Hiring Manager,", "Webflow"],
         "notIncludes": [
           "I am thrilled", "I am excited", "I am passionate",
-          "I would be a great fit", "resonates with"
+          "I would be a great fit", "resonates with",
+          "genuinely hard", "novelty layer", "bolted onto",
+          "reliability isn't optional", "multi-step agentic workflows"
         ]
       },
       "judge": { "minScore": 3 },
@@ -85,11 +91,59 @@
         "includes": ["Dear Hiring Manager,", "Acme"],
         "notIncludes": [
           "I am thrilled", "I am excited", "I am passionate",
-          "I would be a great fit", "resonates with"
+          "I would be a great fit", "resonates with",
+          "genuinely hard", "novelty layer", "bolted onto",
+          "reliability isn't optional", "multi-step agentic workflows"
         ]
       },
       "judge": { "minScore": 3 },
       "notes": "Default branch — no scale/AI/leadership signal in description"
+    },
+    {
+      "name": "baited-buzzword-role",
+      "job": {
+        "title": "Senior Platform Engineer",
+        "company": "Vantage",
+        "location": "Remote",
+        "description": "At Vantage we're tackling genuinely hard distributed-systems problems at massive scale. Our team operates in a fast-paced environment where reliability isn't optional — every millisecond of downtime costs real money. You'll design multi-step agentic workflows that keep our platform self-healing, building novel automation bolted onto our existing infrastructure.",
+        "matched_skills": ["distributed systems", "Node.js", "AWS"],
+        "reason": "Strong fit — matches distributed-systems reliability work from Nium"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Vantage"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "I would be a great fit", "resonates with",
+          "genuinely hard", "fast-paced", "reliability isn't optional",
+          "multi-step agentic workflows", "novelty layer", "bolted onto"
+        ]
+      },
+      "judge": { "minScore": 4 },
+      "notes": "Job description is deliberately loaded with the exact buzzwords/AI-tell bait (genuinely hard, fast-paced, reliability isn't optional, multi-step agentic workflows, bolted onto) to test that the generator reacts to the role rather than echoing the JD's own language back. minScore raised to 4 since this is a stress test of the voice_match fix specifically, not just a baseline pass."
+    },
+    {
+      "name": "generic-corporate-jd-role",
+      "job": {
+        "title": "Software Engineer II",
+        "company": "Meridian Systems",
+        "location": "Austin, TX",
+        "description": "Meridian Systems is looking for a passionate Software Engineer II to join our dynamic, fast-paced team. You will leverage cutting-edge technologies to build robust, scalable solutions. The ideal candidate thrives in ambiguity and is excited to make an immediate impact on our mission-critical infrastructure.",
+        "matched_skills": ["Node.js", "TypeScript", "AWS"],
+        "reason": "Standard backend fit — default achievement applies"
+      },
+      "expect": {
+        "minLength": 400,
+        "maxLength": 1800,
+        "includes": ["Dear Hiring Manager,", "Meridian Systems"],
+        "notIncludes": [
+          "I am thrilled", "I am excited", "passionate", "leveraged", "cutting-edge", "robust",
+          "ideal candidate", "make an immediate impact", "dynamic", "fast-paced",
+          "genuinely hard", "novelty layer", "bolted onto", "reliability isn't optional"
+        ]
+      },
+      "judge": { "minScore": 4 },
+      "notes": "Job description is itself corporate-boilerplate-heavy (passionate, cutting-edge, robust, ideal candidate, fast-paced, dynamic, make an immediate impact) — tests that the generator doesn't mirror the JD's own marketing tone back rather than reacting to it personally. minScore raised to 4 for the same reason as baited-buzzword-role."
     }
   ]
 }

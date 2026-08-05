@@ -104,6 +104,7 @@ export class JobsService {
           source: j.source,
           cover_letter: cl?.content || '',
           generated_at: cl?.generatedAt,
+          is_adhoc: j.status === 'draft',
         };
       })
       .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime());
@@ -126,6 +127,66 @@ export class JobsService {
     );
 
     return { cover_letter: final, cover_letter_raw: raw };
+  }
+
+  async updateCoverLetter(id: string, content: string): Promise<{ cover_letter: string }> {
+    if (!content || !content.trim()) {
+      throw new Error('Cover letter content cannot be empty');
+    }
+
+    const coverLetter = await CoverLetterModel.findOneAndUpdate(
+      { externalJobId: id },
+      {
+        $set: { content },
+        $push: { versions: { content, source: 'edited', savedAt: new Date() } },
+      },
+      { new: true },
+    ).lean();
+
+    if (!coverLetter) throw new NotFoundException(`Cover letter for job ${id} not found`);
+
+    return { cover_letter: (coverLetter as any).content };
+  }
+
+  async createAdhocCoverLetter(data: {
+    description: string;
+    title?: string;
+    company?: string;
+  }): Promise<{ id: string; cover_letter: string; cover_letter_raw: string }> {
+    if (!data.description || !data.description.trim()) {
+      throw new Error('Job description is required');
+    }
+
+    const id = `adhoc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const job = await JobModel.create({
+      externalId: id,
+      title: data.title || 'Untitled role',
+      company: data.company || 'Unknown company',
+      url: '',
+      description: data.description,
+      source: 'manual',
+      location: '',
+      fit_score: 0,
+      apply: false,
+      matched_skills: [],
+      missing_skills: [],
+      reason: '',
+      status: 'draft',
+      scraped_at: new Date(),
+    });
+
+    const { raw, final } = await generateCoverLetterShared(job.toObject() as any);
+
+    await CoverLetterModel.create({
+      jobId: job._id,
+      externalJobId: id,
+      content: final,
+      rawContent: raw,
+      versions: [{ content: final, source: 'generated' }],
+      generatedAt: new Date(),
+    });
+
+    return { id, cover_letter: final, cover_letter_raw: raw };
   }
 
   async addManualJob(data: {

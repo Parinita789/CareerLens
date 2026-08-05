@@ -28,7 +28,6 @@ interface JobTableProps {
     acceptedOutcome?: string,
   ) => void;
   onAutoApply?: (jobIds: string[]) => void;
-  onGenerateCoverLetters?: (jobIds: string[]) => void;
   onCancelSelect?: () => void;
 }
 
@@ -55,7 +54,7 @@ function scoreClass(score: number): string {
   return 'low';
 }
 
-export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onGenerateCoverLetters, onCancelSelect }: JobTableProps) {
+export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect }: JobTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) => {
@@ -137,13 +136,6 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
         <span>{selectedIds.size} job{selectedIds.size !== 1 ? 's' : ''} selected</span>
         <div className="auto-apply-actions">
           <button className="cancel-select-btn" onClick={exitSelectMode}>Cancel</button>
-          <button
-            className="generate-cl-btn"
-            disabled={selectedIds.size === 0}
-            onClick={() => { onGenerateCoverLetters?.(Array.from(selectedIds)); exitSelectMode(); }}
-          >
-            Generate Cover Letters ({selectedIds.size})
-          </button>
           <button
             className="auto-apply-btn"
             disabled={selectedIds.size === 0}

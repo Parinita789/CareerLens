@@ -517,28 +517,6 @@ h1 {
   color: var(--text);
 }
 
-.generate-cl-btn {
-  padding: 6px 18px;
-  border: 1px solid var(--green);
-  border-radius: 8px;
-  background: var(--green-dim);
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.generate-cl-btn:hover {
-  background: var(--green);
-  color: white;
-}
-
-.generate-cl-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .auto-apply-btn {
   padding: 6px 18px;
   border: none;

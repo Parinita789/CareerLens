@@ -1,9 +1,9 @@
-type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'declined' | 'rejected' | 'cover-letters' | 'prepare';
+type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'rejected' | 'cover-letters' | 'prepare';
 
 interface TabBarProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
-  counts: { queue: number; applied: number; interviewing: number; accepted: number; declined: number; rejected: number; coverLetters: number; prepare: number };
+  counts: { queue: number; applied: number; interviewing: number; accepted: number; rejected: number; coverLetters: number; prepare: number };
   onOpenCommands: () => void;
   onOpenKeywords: () => void;
 }
@@ -15,7 +15,6 @@ export function TabBar({ activeTab, onTabChange, counts, onOpenCommands, onOpenK
     { key: 'applied', label: 'Applied', count: counts.applied },
     { key: 'interviewing', label: 'Interviewing', count: counts.interviewing },
     { key: 'accepted', label: 'Accepted', count: counts.accepted },
-    { key: 'declined', label: 'Declined', count: counts.declined },
     { key: 'rejected', label: 'Rejected', count: counts.rejected },
     { key: 'cover-letters', label: 'Cover Letters', count: counts.coverLetters },
   ];

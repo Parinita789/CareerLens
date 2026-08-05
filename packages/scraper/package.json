@@ -3,8 +3,6 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "tsx src/phase2.ts",
-    "phase3": "tsx src/phase3.ts",
-    "phase3:force": "tsx src/phase3.ts --force",
     "phase4": "tsx src/phase4.ts",
     "debug": "tsx src/scraper/debug.ts",
     "verify-slugs": "tsx src/scraper/verify-slugs.ts",

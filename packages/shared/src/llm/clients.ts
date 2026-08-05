@@ -39,7 +39,7 @@ function callClaudeCli(prompt: string, system?: string): Promise<string> {
       '-p', fullPrompt,
       '--output-format', 'text',
       '--dangerously-skip-permissions',
-      '--model', 'claude-sonnet-4-6',
+      '--model', 'claude-opus-4-8',
     ], {
       maxBuffer: 1024 * 1024,
       timeout: 120000,
@@ -77,7 +77,7 @@ export async function llmChat(prompt: string, options?: {
 
   // anthropic
   const res = await getAnthropicClient().messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-opus-4-8',
     max_tokens: maxTokens,
     messages: [{ role: 'user', content: system ? `${system}\n\n${prompt}` : prompt }],
     ...(temperature !== undefined ? { temperature } : {}),

@@ -58,17 +58,12 @@ const COMMANDS: Record<
     label: 'Full Pipeline',
     phases: [
       { name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] },
-      { name: 'cover letters', cmd: 'npx', args: ['tsx', 'src/phase3.ts'] },
       { name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] },
     ],
   },
   scrape: {
     label: 'Scrape + Score',
     phases: [{ name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] }],
-  },
-  'cover-letters': {
-    label: 'Generate Cover Letters',
-    phases: [{ name: 'cover letters', cmd: 'npx', args: ['tsx', 'src/phase3.ts'] }],
   },
   apply: {
     label: 'Auto Apply',
@@ -150,48 +145,27 @@ export class PipelineService {
     if (this.state.running) {
       // Allow auto-apply to run concurrently with scraping
       const isAutoApply = phaseIds.length === 1 && phaseIds[0] === 'apply';
-      const isCoverLetters = phaseIds.length === 1 && phaseIds[0] === 'cover-letters';
-      if (!isAutoApply && !isCoverLetters) {
+      if (!isAutoApply) {
         throw new ConflictException('A command is already running');
       }
       // Spawn independently without blocking the running pipeline
-      const actionName = isAutoApply ? 'Auto Apply' : 'Cover Letters';
-      console.log(`[Pipeline] Running ${actionName} concurrently with:`, this.state.command);
-      const phaseId = isAutoApply ? 'apply' : 'cover-letters';
-      const phase = PHASE_LIST.find((p) => p.id === phaseId);
-      if (!phase) {
-        const scraperDir = SCRAPER_DIR_RESOLVER();
-        const args = ['tsx', phaseId === 'apply' ? 'src/phase4.ts' : 'src/phase3.ts'];
-        if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
-        if (applyPlatforms && applyPlatforms.length > 0)
-          args.push(`--platforms=${applyPlatforms.join(',')}`);
-        if (applyLimit) args.push(`--limit=${applyLimit}`);
-        if (phaseId === 'apply') args.push(`--submit=${allowAutoSubmit}`);
-        this.addLog(`--- ${actionName} started (concurrent) ---`);
-        this.spawnWithLogs('npx', args, scraperDir)
-          .then(() => {
-            this.addLog(`--- ${actionName} completed ---`);
-          })
-          .catch((err) => {
-            this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
-          });
-      } else {
-        const args = [...phase.args];
-        if (applyPlatforms && applyPlatforms.length > 0)
-          args.push(`--platforms=${applyPlatforms.join(',')}`);
-        if (applyLimit) args.push(`--limit=${applyLimit}`);
-        if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
-        if (phaseId === 'apply') args.push(`--submit=${allowAutoSubmit}`);
-        const scraperDir = SCRAPER_DIR_RESOLVER();
-        this.addLog(`--- ${actionName} started (concurrent) ---`);
-        this.spawnWithLogs(phase.cmd, args, scraperDir)
-          .then(() => {
-            this.addLog(`--- ${actionName} completed ---`);
-          })
-          .catch((err) => {
-            this.addLog(`ERROR: ${actionName} failed — ${(err as Error).message}`);
-          });
-      }
+      console.log('[Pipeline] Running Auto Apply concurrently with:', this.state.command);
+      const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
+      const args = [...phase.args];
+      if (applyPlatforms && applyPlatforms.length > 0)
+        args.push(`--platforms=${applyPlatforms.join(',')}`);
+      if (applyLimit) args.push(`--limit=${applyLimit}`);
+      if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
+      args.push(`--submit=${allowAutoSubmit}`);
+      const scraperDir = SCRAPER_DIR_RESOLVER();
+      this.addLog('--- Auto Apply started (concurrent) ---');
+      this.spawnWithLogs(phase.cmd, args, scraperDir)
+        .then(() => {
+          this.addLog('--- Auto Apply completed ---');
+        })
+        .catch((err) => {
+          this.addLog(`ERROR: Auto Apply failed — ${(err as Error).message}`);
+        });
       return;
     }
 
@@ -201,9 +175,6 @@ export class PipelineService {
         if (!phase) return null;
         if (id === 'scrape' && scrapeSources && scrapeSources.length > 0) {
           return { ...phase, args: [...phase.args, `--sources=${scrapeSources.join(',')}`] };
-        }
-        if (id === 'cover-letters' && applyJobIds && applyJobIds.length > 0) {
-          return { ...phase, args: [...phase.args, `--jobs=${applyJobIds.join(',')}`] };
         }
         if (id === 'apply') {
           const args = [...phase.args];

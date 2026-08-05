@@ -23,7 +23,10 @@ const jobSchema = new mongoose.Schema(
     deal_breaker:      String,
     status: {
       type: String,
-      enum: ['to_apply', 'applied', 'rejected', 'no_response', 'interviewing', 'accepted', 'declined'],
+      // 'draft' is a lightweight placeholder job created for a pasted-description
+      // cover letter — it never appears in any tracked-job tab (Queue/Applied/etc.
+      // only match the other statuses), only in the Cover Letters list via the join.
+      enum: ['to_apply', 'applied', 'rejected', 'no_response', 'interviewing', 'accepted', 'declined', 'draft'],
       default: 'to_apply',
     },
     applied_at:        { type: Date, default: null },

@@ -7,7 +7,6 @@ import type { ScoredJob } from '../types';
 import { answerQuestionWithPause } from './form-handler';
 import { answerQuestion, clearRulesCache } from '../scorer/question-answerer';
 import { TARGET_COMPANIES } from '../scraper/company-list';
-import { generateCoverLetter } from '../cover-letter/cover-letter';
 import { saveCoverLetter, logQuestionAnswer, ProfileAnswerModel } from '../db';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1022,12 +1021,6 @@ async function fillAshbyForm(
             .lean()
             .catch(() => null);
           if ((clDoc as any)?.content) coverLetter = (clDoc as any).content;
-        }
-        if (!coverLetter) {
-          const { generateCoverLetter } = await import('../cover-letter/cover-letter');
-          coverLetter = await generateCoverLetter(job);
-          const { saveCoverLetter } = await import('../db');
-          await saveCoverLetter(job.id, coverLetter);
         }
         if (coverLetter) {
           const fsModule = await import('fs');
@@ -2160,14 +2153,6 @@ async function fillFormFields(page: Page, job: ScoredJob): Promise<void> {
             .catch(() => null);
           if ((existing as any)?.content) coverLetter = (existing as any).content;
         }
-        if (!coverLetter) {
-          // Generate one
-          const { generateCoverLetter } = await import('../cover-letter/cover-letter');
-          coverLetter = await generateCoverLetter(job);
-          const { saveCoverLetter } = await import('../db');
-          await saveCoverLetter(job.id, coverLetter);
-        }
-
         if (coverLetter) {
           const tempDir = path.join(__dirname, '../../data/cover-letters');
           const fsModule = await import('fs');
@@ -2767,9 +2752,8 @@ async function handleCoverLetterField(page: Page, job: ScoredJob): Promise<void>
   if (!coverLetterTextarea) {
     console.log('    No cover letter textarea — using file upload');
     const fileUpload = await page.$('input[type="file"][id="cover_letter"]');
-    if (fileUpload) {
+    if (fileUpload && coverLetter) {
       try {
-        if (!coverLetter) coverLetter = await generateCoverLetter(job);
         const tempDir = path.join(__dirname, '../../data/cover-letters');
         fs.mkdirSync(tempDir, { recursive: true });
         const filename = `${job.company.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-cover-letter.txt`;
@@ -2781,6 +2765,8 @@ async function handleCoverLetterField(page: Page, job: ScoredJob): Promise<void>
       } catch (err) {
         console.log(`    Cover letter upload failed: ${(err as Error).message}`);
       }
+    } else if (!coverLetter) {
+      console.log('    No cover letter generated yet for this job — skipping upload');
     }
     return;
   }
@@ -2791,15 +2777,9 @@ async function handleCoverLetterField(page: Page, job: ScoredJob): Promise<void>
     return;
   }
 
-  // Use pre-existing cover letter, only generate if none exists
   if (!coverLetter) {
-    console.log('    Generating cover letter...');
-    try {
-      coverLetter = await generateCoverLetter(job);
-    } catch (err) {
-      console.log(`    Generation failed: ${(err as Error).message}`);
-      return;
-    }
+    console.log('    No cover letter generated yet for this job — skipping');
+    return;
   }
 
   // Fill it directly into the form
