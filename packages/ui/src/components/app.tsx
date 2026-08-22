@@ -504,7 +504,9 @@ export function App() {
         />
       )}
 
-      {activeTab === 'cover-letters' && <CoverLettersPage jobs={coverLetterJobs} />}
+      {activeTab === 'cover-letters' && (
+        <CoverLettersPage jobs={coverLetterJobs} onRefresh={fetchCoverLetters} />
+      )}
 
       {selectedJob && (
         <JobDetail
