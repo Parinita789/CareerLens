@@ -18,7 +18,6 @@ type Tab =
   | 'applied'
   | 'interviewing'
   | 'accepted'
-  | 'declined'
   | 'rejected'
   | 'cover-letters'
   | 'prepare';
@@ -248,12 +247,13 @@ export function App() {
   // reflect totals, not the currently-applied filter (otherwise filtering on
   // Queue makes the Applied/Accepted badges shrink too).
   const queue = jobs.filter((j) => j.status === 'to_apply');
-  // Interviewing now lives in its own tab — keep Applied limited to roles
-  // that haven't progressed yet ("waiting" + "no response").
-  const applied = jobs.filter((j) => ['applied', 'no_response'].includes(j.status));
+  // Interviewing and Accepted have their own tabs, so they're pulled out of
+  // Applied. 'declined' deliberately stays here: it's a terminal outcome of an
+  // application, not a separate stage, so the role keeps its row in Applied
+  // with the status dropdown reading "Declined".
+  const applied = jobs.filter((j) => ['applied', 'no_response', 'declined'].includes(j.status));
   const interviewing = jobs.filter((j) => j.status === 'interviewing');
   const accepted = jobs.filter((j) => j.status === 'accepted');
-  const declined = jobs.filter((j) => j.status === 'declined');
   const rejected = jobs.filter((j) => j.status === 'rejected');
 
   const activeTabJobs =
@@ -265,9 +265,7 @@ export function App() {
           ? interviewing
           : activeTab === 'accepted'
             ? accepted
-            : activeTab === 'declined'
-              ? declined
-              : rejected;
+            : rejected;
 
   // Filters apply ONLY to the currently-visible tab. State persists across tab
   // switches (so a search query carries over if you flip to a different tab to
@@ -375,7 +373,6 @@ export function App() {
           applied: applied.length,
           interviewing: interviewing.length,
           accepted: accepted.length,
-          declined: declined.length,
           rejected: rejected.length,
           coverLetters: coverLetterJobs.length,
           prepare: prepareJobs.filter((p: any) => p.status !== 'applied').length,

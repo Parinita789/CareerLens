@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ScoredJob } from '../types';
 import { INTERVIEW_ROUNDS, ACCEPTED_OUTCOMES } from './app';
 
-type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'declined' | 'rejected' | 'prepare';
+type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'rejected' | 'prepare';
 
 export type SortBy =
   | 'default'        // existing behavior: new-within-24h first, then by score
