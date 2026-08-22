@@ -11,7 +11,7 @@ import * as dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { connectToDatabase, disconnectDatabase } from '../db';
+import { connectToDatabase, disconnectDatabase } from '../persistence/db';
 import { generateCoverLetter } from '@job-agent/shared';
 import { grade, pad, preview, type Expect } from './_lib';
 import { judgeCoverLetter, type JudgeRubric } from './_judge';

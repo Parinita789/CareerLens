@@ -1,39 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { QuickRejectService } from '../scoring/quick-reject.service';
 
-// Inline the quickReject function since it's not exported from phase2
-function quickReject(job: { title: string; description: string }): string | null {
-  const t = job.title.toLowerCase();
-  const d = job.description.slice(0, 500).toLowerCase();
-
-  const titleRejects = [
-    'frontend', 'front-end', 'ios developer', 'android developer',
-    'data scientist', 'machine learning engineer', 'ml engineer',
-    'designer', 'ux ', 'product manager', 'sales ', 'recruiter',
-    'marketing', 'finance', 'legal', 'devrel', 'developer advocate',
-    'embedded', 'firmware', 'hardware', 'mechanical',
-    'data analyst', 'analytics engineer', 'qa engineer', 'sdet',
-    'test engineer', 'intern ', 'junior',
-  ];
-  for (const k of titleRejects) {
-    if (t.includes(k)) return `Title exclude: ${k}`;
-  }
-
-  const wrongStack = [
-    { keywords: ['java ', 'spring boot', 'jvm', 'kotlin'], label: 'Java/JVM' },
-    { keywords: ['.net', 'c# ', 'asp.net', 'blazor'], label: '.NET/C#' },
-    { keywords: ['ruby on rails', 'rails ', 'ruby '], label: 'Ruby/Rails' },
-    { keywords: ['php ', 'laravel', 'symfony'], label: 'PHP' },
-    { keywords: ['swift ', 'swiftui', 'uikit'], label: 'iOS/Swift' },
-    { keywords: ['flutter', 'dart '], label: 'Flutter/Dart' },
-  ];
-
-  for (const stack of wrongStack) {
-    const hits = stack.keywords.filter((k) => d.includes(k)).length;
-    if (hits >= 2) return `Wrong stack: ${stack.label}`;
-  }
-
-  return null;
-}
+const quickRejectService = new QuickRejectService();
+const quickReject = quickRejectService.quickReject.bind(quickRejectService) as (job: {
+  title: string;
+  description: string;
+}) => string | null;
 
 describe('quickReject', () => {
   describe('title-based rejections', () => {
@@ -65,8 +37,12 @@ describe('quickReject', () => {
       expect(quickReject({ title: 'Software Engineer', description: '' })).toBeNull();
     });
 
-    it('accepts staff engineer', () => {
-      expect(quickReject({ title: 'Staff Software Engineer', description: '' })).toBeNull();
+    it('rejects staff engineer', () => {
+      expect(quickReject({ title: 'Staff Software Engineer', description: '' })).toContain('staff');
+    });
+
+    it('rejects principal engineer', () => {
+      expect(quickReject({ title: 'Principal Engineer', description: '' })).toContain('principal');
     });
 
     it('accepts full stack', () => {

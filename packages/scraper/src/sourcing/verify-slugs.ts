@@ -1,5 +1,5 @@
-// packages/scraper/src/scraper/verify-slugs.ts
-import { TARGET_COMPANIES } from './company-list';
+// packages/scraper/src/sourcing/verify-slugs.ts
+import { TARGET_COMPANIES } from '../common/company-directory';
 
 async function verifySlugs() {
   console.log('Verifying all company slugs...\n');

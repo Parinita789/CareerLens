@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { llmChatWithRetry } from '@job-agent/shared';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -194,17 +195,20 @@ function filterFabricatedMatches(
   return { kept, dropped };
 }
 
-export async function scoreFitWithLLM(job: JobListing): Promise<ScoreResult> {
-  const prompt = buildScorerPrompt(job);
-  const raw = await callWithRetry(prompt);
-  const parsed = safeParseJSON(raw);
+@Injectable()
+export class LlmScorerService {
+  async scoreFitWithLLM(job: JobListing): Promise<ScoreResult> {
+    const prompt = buildScorerPrompt(job);
+    const raw = await callWithRetry(prompt);
+    const parsed = safeParseJSON(raw);
 
-  const { kept, dropped } = filterFabricatedMatches(parsed.matched_skills, job);
-  if (dropped.length > 0) {
-    console.log(
-      `    Dropped fabricated matched_skills (not in JD) for "${job.title}": ${dropped.join(', ')}`,
-    );
+    const { kept, dropped } = filterFabricatedMatches(parsed.matched_skills, job);
+    if (dropped.length > 0) {
+      console.log(
+        `    Dropped fabricated matched_skills (not in JD) for "${job.title}": ${dropped.join(', ')}`,
+      );
+    }
+    parsed.matched_skills = kept;
+    return parsed;
   }
-  parsed.matched_skills = kept;
-  return parsed;
 }

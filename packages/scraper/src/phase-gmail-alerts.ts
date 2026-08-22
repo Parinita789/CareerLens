@@ -1,75 +1,29 @@
-import {
-  connectToDatabase,
-  disconnectDatabase,
-  loadExistingJobs,
-  saveJobs as persistJobs,
-} from './db';
-import { fetchGmailAlerts } from './scraper/gmail-alerts';
-import { checkDealBreakers } from './deal-breakers';
-import { scoreFitWithLLM } from './scorer/llm-scorer';
+import 'reflect-metadata';
+import { NestFactory } from '@nestjs/core';
+import type { INestApplicationContext } from '@nestjs/common';
+import { connectToDatabase, disconnectDatabase } from './persistence/db';
+import { AppModule } from './app.module';
+import { DealBreakerService } from './scoring/deal-breakers.service';
+import { LlmScorerService } from './scoring/llm-scorer.service';
+import { QuickRejectService } from './scoring/quick-reject.service';
+import { ScraperPersistenceService } from './persistence/persistence.service';
+import { GmailAlertsService } from './sourcing/gmail-alerts.service';
 import type { JobListing, ScoredJob } from './types';
 
 const LLM_CONCURRENCY = 5;
 
-function quickReject(job: JobListing): string | null {
-  const t = job.title.toLowerCase();
-  const d = job.description.slice(0, 500).toLowerCase();
-
-  const titleRejects = [
-    'frontend',
-    'front-end',
-    'ios developer',
-    'android developer',
-    'data scientist',
-    'machine learning engineer',
-    'ml engineer',
-    'designer',
-    'ux ',
-    'product manager',
-    'sales ',
-    'recruiter',
-    'marketing',
-    'finance',
-    'legal',
-    'devrel',
-    'developer advocate',
-    'embedded',
-    'firmware',
-    'hardware',
-    'mechanical',
-    'data analyst',
-    'analytics engineer',
-    'qa engineer',
-    'sdet',
-    'test engineer',
-    'intern ',
-    'junior',
-  ];
-  for (const k of titleRejects) {
-    if (t.includes(k)) return `Title exclude: ${k}`;
-  }
-
-  const wrongStack = [
-    { keywords: ['java ', 'spring boot', 'jvm', 'kotlin'], label: 'Java/JVM' },
-    { keywords: ['.net', 'c# ', 'asp.net', 'blazor'], label: '.NET/C#' },
-    { keywords: ['ruby on rails', 'rails ', 'ruby '], label: 'Ruby/Rails' },
-    { keywords: ['php ', 'laravel', 'symfony'], label: 'PHP' },
-    { keywords: ['swift ', 'swiftui', 'uikit'], label: 'iOS/Swift' },
-    { keywords: ['flutter', 'dart '], label: 'Flutter/Dart' },
-  ];
-
-  for (const stack of wrongStack) {
-    const hits = stack.keywords.filter((k) => d.includes(k)).length;
-    if (hits >= 2) return `Wrong stack: ${stack.label}`;
-  }
-
-  return null;
+interface Services {
+  dealBreakers: DealBreakerService;
+  quickReject: QuickRejectService;
+  scorer: LlmScorerService;
+  persistence: ScraperPersistenceService;
+  gmailAlerts: GmailAlertsService;
 }
 
-async function scoreBatch(batch: JobListing[]): Promise<ScoredJob[]> {
+async function scoreBatch(batch: JobListing[], scorer: LlmScorerService): Promise<ScoredJob[]> {
   const promises = batch.map(async (job) => {
     try {
-      const score = await scoreFitWithLLM(job);
+      const score = await scorer.scoreFitWithLLM(job);
       return {
         ...job,
         ...score,
@@ -91,18 +45,18 @@ async function scoreBatch(batch: JobListing[]): Promise<ScoredJob[]> {
   return Promise.all(promises);
 }
 
-async function main(): Promise<number> {
+async function main(services: Services): Promise<number> {
   console.log('Gmail Job Alerts — Fetch + Scrape + Score');
   console.log('==========================================\n');
 
-  const existing = await loadExistingJobs();
+  const existing = await services.persistence.loadExistingJobs();
   const existingIds = new Set(existing.map((j) => j.id));
   const existingKeys = new Set(existing.map((j) => `${j.company}|||${j.title}`.toLowerCase()));
   const existingUrls = new Set(existing.map((j) => j.url).filter(Boolean));
   console.log(`Existing jobs in tracker: ${existing.length}\n`);
 
   // Fetch from Gmail
-  const alertJobs = await fetchGmailAlerts(existingUrls);
+  const alertJobs = await services.gmailAlerts.fetchGmailAlerts(existingUrls);
 
   // Deduplicate
   const newJobs = alertJobs.filter((j) => {
@@ -127,7 +81,7 @@ async function main(): Promise<number> {
   const needsLLM: JobListing[] = [];
 
   for (const job of newJobs) {
-    const dealBreaker = checkDealBreakers(job);
+    const dealBreaker = services.dealBreakers.checkDealBreakers(job);
     if (dealBreaker.rejected) {
       newScored.push({
         ...job,
@@ -141,7 +95,7 @@ async function main(): Promise<number> {
       });
       continue;
     }
-    const reject = quickReject(job);
+    const reject = services.quickReject.quickReject(job);
     if (reject) {
       newScored.push({
         ...job,
@@ -157,7 +111,7 @@ async function main(): Promise<number> {
     needsLLM.push(job);
   }
 
-  if (newScored.length > 0) await persistJobs(newScored);
+  if (newScored.length > 0) await services.persistence.saveJobs(newScored);
 
   const filtered = newJobs.length - needsLLM.length;
   console.log(`Fast-filtered: ${filtered}`);
@@ -171,7 +125,7 @@ async function main(): Promise<number> {
       const batchNum = Math.floor(i / LLM_CONCURRENCY) + 1;
 
       console.log(`[Batch ${batchNum}/${totalBatches}] Scoring ${batch.length} jobs...`);
-      const scored = await scoreBatch(batch);
+      const scored = await scoreBatch(batch, services.scorer);
 
       for (const s of scored) {
         console.log(
@@ -179,12 +133,12 @@ async function main(): Promise<number> {
         );
         newScored.push(s);
       }
-      await persistJobs(scored);
+      await services.persistence.saveJobs(scored);
     }
   }
 
   // Summary
-  const allJobs = await loadExistingJobs();
+  const allJobs = await services.persistence.loadExistingJobs();
   const toApply = allJobs.filter((j) => j.status === 'to_apply');
   console.log('\n' + '━'.repeat(45));
   console.log('GMAIL ALERTS SUMMARY');
@@ -211,14 +165,26 @@ async function run() {
   const intervalMinutes = intervalArg ? parseInt(intervalArg.split('=')[1], 10) : 5;
 
   await connectToDatabase();
+  const app: INestApplicationContext = await NestFactory.createApplicationContext(AppModule, {
+    logger: false,
+  });
+  const services: Services = {
+    dealBreakers: app.get(DealBreakerService),
+    quickReject: app.get(QuickRejectService),
+    scorer: app.get(LlmScorerService),
+    persistence: app.get(ScraperPersistenceService),
+    gmailAlerts: app.get(GmailAlertsService),
+  };
 
   if (watchMode) {
     console.log(`\n📬 Gmail watcher started (checking every ${intervalMinutes} min)\n`);
     console.log('Press Ctrl+C to stop.\n');
 
+    // Bootstrap the Nest context once, above — never per poll iteration — so every
+    // poll shares the same singleton service instances instead of re-resolving DI.
     const poll = async () => {
       try {
-        const found = await main();
+        const found = await main(services);
         if (found > 0) {
           console.log(`\n✓ Processed ${found} new jobs\n`);
         }
@@ -231,7 +197,8 @@ async function run() {
     await poll();
     setInterval(poll, intervalMinutes * 60 * 1000);
   } else {
-    await main();
+    await main(services);
+    await app.close();
     await disconnectDatabase();
   }
 }

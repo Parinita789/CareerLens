@@ -1,21 +1,36 @@
+import 'reflect-metadata';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import {
-  connectToDatabase,
-  disconnectDatabase,
-  loadExistingJobs as dbLoadJobs,
-  saveJobs as dbSaveJobs,
-} from './db';
-import { scrapeLinkedIn } from './scraper/linkedin';
-import { scrapeLinkedInAlerts } from './scraper/linkedin-alerts';
-import { scrapeGreenhouse } from './scraper/greenhouse';
-import { scrapeLever } from './scraper/lever';
-import { scrapeIndeed } from './scraper/indeed';
-import { scrapeAshby } from './scraper/ashby';
-import { checkDealBreakers } from './deal-breakers';
-import { scoreFitWithLLM } from './scorer/llm-scorer';
-import { TARGET_COMPANIES } from './scraper/company-list';
+import { NestFactory } from '@nestjs/core';
+import { connectToDatabase, disconnectDatabase } from './persistence/db';
+import { TARGET_COMPANIES } from './common/company-directory';
+import { AppModule } from './app.module';
+import { DealBreakerService } from './scoring/deal-breakers.service';
+import { LlmScorerService } from './scoring/llm-scorer.service';
+import { QuickRejectService } from './scoring/quick-reject.service';
+import { ScraperPersistenceService } from './persistence/persistence.service';
+import { LinkedInService } from './sourcing/linkedin.service';
+import { LinkedInAlertsService } from './sourcing/linkedin-alerts.service';
+import { GreenhouseService } from './sourcing/greenhouse.service';
+import { LeverService } from './sourcing/lever.service';
+import { IndeedService } from './sourcing/indeed.service';
+import { AshbyService } from './sourcing/ashby.service';
+import { FormScraperService } from './sourcing/form-scraper.service';
 import type { JobListing, ScoredJob } from './types';
+
+interface Services {
+  dealBreakers: DealBreakerService;
+  quickReject: QuickRejectService;
+  scorer: LlmScorerService;
+  persistence: ScraperPersistenceService;
+  linkedIn: LinkedInService;
+  linkedInAlerts: LinkedInAlertsService;
+  greenhouse: GreenhouseService;
+  lever: LeverService;
+  indeed: IndeedService;
+  ashby: AshbyService;
+  formScraper: FormScraperService;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -80,79 +95,19 @@ const LINKEDIN_QUERIES = [
 const LINKEDIN_JOBS_PER_QUERY = 25;
 
 // DB-backed load/save
-async function loadJobs(): Promise<ScoredJob[]> {
-  return dbLoadJobs();
+async function loadJobs(persistence: ScraperPersistenceService): Promise<ScoredJob[]> {
+  return persistence.loadExistingJobs();
 }
 
-async function persistJobs(jobs: ScoredJob[]): Promise<void> {
-  await dbSaveJobs(jobs);
-}
-
-// ── Fast keyword pre-filter (no LLM needed) ────────────────────────
-function quickReject(job: JobListing): string | null {
-  const t = job.title.toLowerCase();
-  const d = job.description.slice(0, 500).toLowerCase();
-
-  // wrong role entirely
-  const titleRejects = [
-    'frontend',
-    'front-end',
-    'ios developer',
-    'android developer',
-    'data scientist',
-    'machine learning engineer',
-    'ml engineer',
-    'designer',
-    'ux ',
-    'product manager',
-    'sales ',
-    'recruiter',
-    'marketing',
-    'finance',
-    'legal',
-    'devrel',
-    'developer advocate',
-    'embedded',
-    'firmware',
-    'hardware',
-    'mechanical',
-    'data analyst',
-    'analytics engineer',
-    'qa engineer',
-    'sdet',
-    'test engineer',
-    'intern ',
-    'junior',
-    'principal',
-    'staff ',
-  ];
-  for (const k of titleRejects) {
-    if (t.includes(k)) return `Title exclude: ${k}`;
-  }
-
-  // wrong primary stack — description dominated by non-matching tech
-  const wrongStack = [
-    { keywords: ['java ', 'spring boot', 'jvm', 'kotlin'], label: 'Java/JVM' },
-    { keywords: ['.net', 'c# ', 'asp.net', 'blazor'], label: '.NET/C#' },
-    { keywords: ['ruby on rails', 'rails ', 'ruby '], label: 'Ruby/Rails' },
-    { keywords: ['php ', 'laravel', 'symfony'], label: 'PHP' },
-    { keywords: ['swift ', 'swiftui', 'uikit'], label: 'iOS/Swift' },
-    { keywords: ['flutter', 'dart '], label: 'Flutter/Dart' },
-  ];
-
-  for (const stack of wrongStack) {
-    const hits = stack.keywords.filter((k) => d.includes(k)).length;
-    if (hits >= 2) return `Wrong stack: ${stack.label}`;
-  }
-
-  return null;
+async function persistJobs(jobs: ScoredJob[], persistence: ScraperPersistenceService): Promise<void> {
+  await persistence.saveJobs(jobs);
 }
 
 // ── Score a batch of jobs concurrently ──────────────────────────────
-async function scoreBatch(batch: JobListing[]): Promise<ScoredJob[]> {
+async function scoreBatch(batch: JobListing[], scorer: LlmScorerService): Promise<ScoredJob[]> {
   const promises = batch.map(async (job) => {
     try {
-      const score = await scoreFitWithLLM(job);
+      const score = await scorer.scoreFitWithLLM(job);
       return {
         ...job,
         ...score,
@@ -178,96 +133,6 @@ async function scoreBatch(batch: JobListing[]): Promise<ScoredJob[]> {
 type Source = 'linkedin' | 'greenhouse' | 'lever' | 'indeed' | 'ashby';
 const ALL_SOURCES: Source[] = ['ashby', 'greenhouse', 'linkedin', 'lever'];
 
-async function scrapeAllSources(sources: Source[] = ALL_SOURCES): Promise<JobListing[]> {
-  const all: JobListing[] = [];
-  const enabled = new Set(sources);
-
-  if (enabled.has('linkedin')) {
-    console.log('━'.repeat(45));
-    console.log('SOURCE — LinkedIn');
-    console.log('━'.repeat(45));
-
-    for (const query of LINKEDIN_QUERIES) {
-      console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
-      try {
-        const jobs = await scrapeLinkedIn(query.keywords, query.location, LINKEDIN_JOBS_PER_QUERY);
-        console.log(`  Got ${jobs.length} jobs`);
-        all.push(...jobs);
-      } catch (err) {
-        console.error(`  Failed: ${(err as Error).message}`);
-      }
-    }
-
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — LinkedIn Job Alerts');
-    console.log('━'.repeat(45));
-
-    try {
-      const alertJobs = await scrapeLinkedInAlerts(50);
-      console.log(`  Got ${alertJobs.length} jobs from alerts`);
-      all.push(...alertJobs);
-    } catch (err) {
-      console.error(`  Alerts failed: ${(err as Error).message}`);
-    }
-  }
-
-  if (enabled.has('greenhouse')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — Greenhouse');
-    console.log('━'.repeat(45) + '\n');
-
-    const greenhouseCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'greenhouse');
-    console.log(`Scraping ${greenhouseCompanies.length} companies...\n`);
-
-    for (const company of greenhouseCompanies) {
-      const jobs = await scrapeGreenhouse(company.slug, company.name);
-      all.push(...jobs);
-    }
-  }
-
-  if (enabled.has('lever')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — Lever');
-    console.log('━'.repeat(45) + '\n');
-
-    const leverCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'lever');
-    console.log(`Scraping ${leverCompanies.length} companies...\n`);
-
-    for (const company of leverCompanies) {
-      const jobs = await scrapeLever(company.slug, company.name);
-      all.push(...jobs);
-    }
-  }
-
-  if (enabled.has('indeed')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — Indeed');
-    console.log('━'.repeat(45));
-
-    const indeedSeen = new Set<string>();
-    for (const query of INDEED_QUERIES) {
-      console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
-      try {
-        const jobs = await scrapeIndeed(query.keywords, query.location, INDEED_JOBS_PER_QUERY);
-        // Dedup across queries by id
-        const newJobs = jobs.filter((j) => {
-          if (indeedSeen.has(j.id)) return false;
-          indeedSeen.add(j.id);
-          return true;
-        });
-        console.log(
-          `  Got ${jobs.length} jobs (${jobs.length - newJobs.length} cross-query dupes)`,
-        );
-        all.push(...newJobs);
-      } catch (err) {
-        console.error(`  Failed: ${(err as Error).message}`);
-      }
-    }
-  }
-
-  return all;
-}
-
 // Dedup, filter, and score a batch of raw jobs. Writes per-source counters and
 // scored-job samples into `stats` so main() can print a quality breakdown at the end.
 async function dedupFilterScore(
@@ -278,6 +143,7 @@ async function dedupFilterScore(
   seenUrls: Set<string>,
   existingIds: Set<string>,
   stats: Record<string, SourceStats>,
+  services: Services,
 ): Promise<{ total: number; deduped: number; filtered: number; scored: number }> {
   // Source is derived from the raw jobs themselves — all jobs in a single call
   // come from one scraper. Fall back to 'unknown' only when rawJobs is empty
@@ -320,7 +186,7 @@ async function dedupFilterScore(
   const needsLLM: JobListing[] = [];
 
   for (const job of unique) {
-    const dealBreaker = checkDealBreakers(job);
+    const dealBreaker = services.dealBreakers.checkDealBreakers(job);
     if (dealBreaker.rejected) {
       rejected.push({
         ...job,
@@ -334,7 +200,7 @@ async function dedupFilterScore(
       });
       continue;
     }
-    const qr = quickReject(job);
+    const qr = services.quickReject.quickReject(job);
     if (qr) {
       rejected.push({
         ...job,
@@ -353,7 +219,7 @@ async function dedupFilterScore(
   bucket.fastRejected += rejected.length;
   bucket.samples.push(...rejected);
 
-  if (rejected.length > 0) await persistJobs(rejected);
+  if (rejected.length > 0) await persistJobs(rejected, services.persistence);
   console.log(`  Filter: ${rejected.length} rejected, ${needsLLM.length} need LLM`);
 
   // LLM scoring in batches
@@ -365,7 +231,7 @@ async function dedupFilterScore(
       const batchNum = Math.floor(i / LLM_CONCURRENCY) + 1;
 
       console.log(`  [${sourceName} ${batchNum}/${totalBatches}] Scoring ${batch.length}...`);
-      const scored = await scoreBatch(batch);
+      const scored = await scoreBatch(batch, services.scorer);
 
       for (const s of scored) {
         console.log(
@@ -378,16 +244,15 @@ async function dedupFilterScore(
         if (s.fit_score >= 5) bucket.toApply += 1;
         bucket.samples.push(s);
       }
-      await persistJobs(scored);
+      await persistJobs(scored, services.persistence);
     }
   }
 
   // Pre-scrape application forms for 7+ scored jobs
   if (highScoreJobs.length > 0) {
     try {
-      const { scrapeApplicationForms } = await import('./scraper/form-scraper');
       console.log(`\n  Pre-scraping forms for ${highScoreJobs.length} high-score jobs...`);
-      await scrapeApplicationForms(highScoreJobs);
+      await services.formScraper.scrapeApplicationForms(highScoreJobs);
     } catch (err) {
       console.error(`  Form pre-scrape failed: ${(err as Error).message}`);
     }
@@ -412,8 +277,22 @@ async function main() {
   console.log('=====================================\n');
 
   await connectToDatabase();
+  const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const services: Services = {
+    dealBreakers: app.get(DealBreakerService),
+    quickReject: app.get(QuickRejectService),
+    scorer: app.get(LlmScorerService),
+    persistence: app.get(ScraperPersistenceService),
+    linkedIn: app.get(LinkedInService),
+    linkedInAlerts: app.get(LinkedInAlertsService),
+    greenhouse: app.get(GreenhouseService),
+    lever: app.get(LeverService),
+    indeed: app.get(IndeedService),
+    ashby: app.get(AshbyService),
+    formScraper: app.get(FormScraperService),
+  };
 
-  const existingJobs = await loadJobs();
+  const existingJobs = await loadJobs(services.persistence);
   const existingIds = new Set(existingJobs.map((j) => j.id));
   console.log(`Existing jobs in tracker: ${existingJobs.length}\n`);
 
@@ -438,9 +317,9 @@ async function main() {
     const ashbyCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'ashby');
 
     for (const company of ashbyCompanies) {
-      const jobs = await scrapeAshby(company.slug, company.name);
+      const jobs = await services.ashby.scrapeAshby(company.slug, company.name);
       if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats);
+        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
       }
     }
   }
@@ -454,9 +333,9 @@ async function main() {
     const greenhouseCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'greenhouse');
 
     for (const company of greenhouseCompanies) {
-      const jobs = await scrapeGreenhouse(company.slug, company.name);
+      const jobs = await services.greenhouse.scrapeGreenhouse(company.slug, company.name);
       if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats);
+        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
       }
     }
   }
@@ -470,7 +349,7 @@ async function main() {
     for (const query of LINKEDIN_QUERIES) {
       console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
       try {
-        const jobs = await scrapeLinkedIn(query.keywords, query.location, LINKEDIN_JOBS_PER_QUERY);
+        const jobs = await services.linkedIn.scrapeLinkedIn(query.keywords, query.location, LINKEDIN_JOBS_PER_QUERY);
         console.log(`  Got ${jobs.length} jobs`);
         if (jobs.length > 0) {
           await dedupFilterScore(
@@ -481,6 +360,7 @@ async function main() {
             seenUrls,
             existingIds,
             stats,
+            services,
           );
         }
       } catch (err) {
@@ -506,7 +386,7 @@ async function main() {
         for (const alert of alerts) {
           console.log(`\n  Alert: "${alert.label}"`);
           try {
-            const jobs = await scrapeLinkedIn(alert.keywords, alert.location, 50);
+            const jobs = await services.linkedIn.scrapeLinkedIn(alert.keywords, alert.location, 50);
             console.log(`  Got ${jobs.length} jobs`);
             if (jobs.length > 0) {
               await dedupFilterScore(
@@ -517,6 +397,7 @@ async function main() {
                 seenUrls,
                 existingIds,
                 stats,
+                services,
               );
             }
           } catch (err) {
@@ -525,7 +406,7 @@ async function main() {
         }
       } else {
         // Fallback to the combined function if no alerts.json
-        const alertJobs = await scrapeLinkedInAlerts(50);
+        const alertJobs = await services.linkedInAlerts.scrapeLinkedInAlerts(50);
         console.log(`  Got ${alertJobs.length} jobs from alerts`);
         if (alertJobs.length > 0) {
           await dedupFilterScore(
@@ -536,6 +417,7 @@ async function main() {
             seenUrls,
             existingIds,
             stats,
+            services,
           );
         }
       }
@@ -553,9 +435,9 @@ async function main() {
     const leverCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'lever');
 
     for (const company of leverCompanies) {
-      const jobs = await scrapeLever(company.slug, company.name);
+      const jobs = await services.lever.scrapeLever(company.slug, company.name);
       if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats);
+        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
       }
     }
   }
@@ -570,7 +452,7 @@ async function main() {
     for (const query of INDEED_QUERIES) {
       console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
       try {
-        const jobs = await scrapeIndeed(query.keywords, query.location, INDEED_JOBS_PER_QUERY);
+        const jobs = await services.indeed.scrapeIndeed(query.keywords, query.location, INDEED_JOBS_PER_QUERY);
         const newJobs = jobs.filter((j) => {
           if (indeedSeen.has(j.id)) return false;
           indeedSeen.add(j.id);
@@ -588,6 +470,7 @@ async function main() {
             seenUrls,
             existingIds,
             stats,
+            services,
           );
         }
       } catch (err) {
@@ -597,7 +480,7 @@ async function main() {
   }
 
   // ── Final summary ──
-  const allJobs = await loadJobs();
+  const allJobs = await loadJobs(services.persistence);
 
   console.log('\n' + '━'.repeat(45));
   console.log('FINAL SUMMARY');
@@ -664,6 +547,7 @@ async function main() {
 
   console.log(`\nSaved to MongoDB`);
 
+  await app.close();
   await disconnectDatabase();
 }
 

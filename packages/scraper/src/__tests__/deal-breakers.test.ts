@@ -17,7 +17,10 @@ vi.mock('fs', async () => {
   };
 });
 
-import { checkDealBreakers } from '../deal-breakers';
+import { DealBreakerService } from '../scoring/deal-breakers.service';
+
+const dealBreakerService = new DealBreakerService();
+const checkDealBreakers = dealBreakerService.checkDealBreakers.bind(dealBreakerService);
 
 const baseJob = {
   id: 'test',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getProfileAnswer, matchRule, matchOption } from '../scraper/form-pre-answerer';
+import { getProfileAnswer, matchRule, matchOption } from '../answer-resolution/form-pre-answerer.service';
 
 const mockProfile = {
   personal: {

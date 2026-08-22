@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { connectToDatabase, disconnectDatabase } from '../db';
+import { connectToDatabase, disconnectDatabase } from '../persistence/db';
 import { ProfileAnswerModel } from '@job-agent/shared';
 
 const CANONICAL_RULES: Record<string, string> = {

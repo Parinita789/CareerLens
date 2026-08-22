@@ -6,8 +6,8 @@ import * as dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { connectToDatabase, disconnectDatabase } from '../db';
-import { answerQuestion } from '../scorer/question-answerer';
+import { connectToDatabase, disconnectDatabase } from '../persistence/db';
+import { answerQuestion } from '../answer-resolution/question-answerer.service';
 import { grade, pad, preview, type Expect } from './_lib';
 
 interface Case {

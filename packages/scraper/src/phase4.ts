@@ -1,18 +1,18 @@
+import 'reflect-metadata';
 import { chromium } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
-import { applyViaEasyApply } from './apply/easy-apply';
-import { applyViaGreenhouse } from './apply/greenhouse-apply';
-import { probeLinkedInApplyTarget, classifyAts } from './apply/linkedin-probe';
+import { NestFactory } from '@nestjs/core';
 import {
   connectToDatabase,
   disconnectDatabase,
-  loadExistingJobs,
-  saveJob,
   resetAnswerSourceStats,
   getAnswerSourceStats,
-} from './db';
+} from './persistence/db';
+import { AppModule } from './app.module';
+import { ScraperPersistenceService } from './persistence/persistence.service';
+import { ApplyOrchestratorService } from './apply/apply-orchestrator.service';
 import type { ScoredJob } from './types';
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
@@ -21,6 +21,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   await connectToDatabase();
+  const app = await NestFactory.createApplicationContext(AppModule, { logger: false });
+  const persistence = app.get(ScraperPersistenceService);
+  const applyOrchestrator = app.get(ApplyOrchestratorService);
   resetAnswerSourceStats();
 
   // Parse --platforms flag: e.g. --platforms=greenhouse,linkedin
@@ -48,9 +51,9 @@ async function main() {
   // Only load specific jobs when IDs are provided (skip loading all 1600+ jobs)
   let jobs: ScoredJob[];
   if (specificJobIds) {
-    const { JobModel } = await import('./db');
+    const { JobModel } = await import('./persistence/db');
     const docs = await JobModel.find({ externalId: { $in: specificJobIds } }).lean();
-    const { default: _ } = await import('./db'); // ensure jobDocToScoredJob is available
+    const { default: _ } = await import('./persistence/db'); // ensure jobDocToScoredJob is available
     jobs = docs.map((d: any) => ({
       id: d.externalId,
       title: d.title,
@@ -75,7 +78,7 @@ async function main() {
     })) as ScoredJob[];
     console.log(`Loaded ${jobs.length} specific jobs from DB`);
   } else {
-    jobs = await loadExistingJobs();
+    jobs = await persistence.loadExistingJobs();
   }
 
   const allEligible = specificJobIds
@@ -100,6 +103,7 @@ async function main() {
 
   if (toApply.length === 0) {
     console.log('No eligible jobs with status "to_apply".');
+    await app.close();
     await disconnectDatabase();
     return;
   }
@@ -132,6 +136,7 @@ async function main() {
   // Exit cleanly when user manually closes the browser window
   browser.on('disconnected', async () => {
     console.log('\n  Browser closed by user. Exiting...');
+    await app.close().catch(() => {});
     await disconnectDatabase().catch(() => {});
     process.exit(0);
   });
@@ -234,35 +239,7 @@ async function main() {
     // Same tab, sequential — more human-like
     let result: any;
     try {
-      if (job.source === 'greenhouse' || job.source === 'ashby') {
-        result = await applyViaGreenhouse(page, job, submit);
-      } else if (job.source === 'linkedin') {
-        // Probe whether this LinkedIn job is Easy Apply or redirects to an
-        // external ATS. If the redirect is to Greenhouse/Ashby, reroute through
-        // the Greenhouse applier — it handles those DOMs much better than
-        // applyViaEasyApply, which can only drive LinkedIn's own modal.
-        const probe = await probeLinkedInApplyTarget(page, job.url);
-        if (probe.kind === 'easy_apply') {
-          console.log('  Detected: LinkedIn Easy Apply → using Easy Apply flow');
-          result = await applyViaEasyApply(page, job, submit);
-        } else if (probe.kind === 'external') {
-          const ats = classifyAts(probe.url);
-          console.log(`  Detected: external ATS "${probe.host}" (classified as ${ats})`);
-          if (ats === 'greenhouse' || ats === 'ashby') {
-            // Hand the external URL to the Greenhouse applier by passing a
-            // modified job object (original LinkedIn URL left alone in DB).
-            result = await applyViaGreenhouse(page, { ...job, url: probe.url, source: ats }, submit);
-          } else {
-            console.log(`  Unsupported external ATS (${probe.host}) — skipping`);
-            result = { success: false, reason: `Unsupported external ATS: ${probe.host}` };
-          }
-        } else {
-          console.log(`  Probe inconclusive (${probe.reason}) — trying Easy Apply as fallback`);
-          result = await applyViaEasyApply(page, job, submit);
-        }
-      } else {
-        result = await applyViaEasyApply(page, job, submit);
-      }
+      result = await applyOrchestrator.applyToJob(page, job, submit);
     } catch (err) {
       const msg = (err as Error).message || '';
       if (msg.includes('closed') || msg.includes('destroyed')) {
@@ -295,7 +272,7 @@ async function main() {
       job.status = 'applied';
       job.applied_at = new Date().toISOString();
       job.applied_via = 'auto';
-      await saveJob(job);
+      await persistence.saveJob(job);
       // Mark applicationFields as applied so it disappears from Prepare tab
       await ApplicationFieldsModel.findOneAndUpdate(
         { externalJobId: job.id },
@@ -308,7 +285,7 @@ async function main() {
       // Mark as rejected so it doesn't show up again
       job.status = 'rejected';
       job.reason = result.reason;
-      await saveJob(job);
+      await persistence.saveJob(job);
     } else if (result.reason.includes('skipped') || result.reason.includes('Timed out')) {
       console.log(`  SKIPPED — moving to next job`);
       results.skipped.push({ job: label, reason: result.reason });
@@ -369,6 +346,7 @@ async function main() {
     }
   }
 
+  await app.close();
   await disconnectDatabase();
 }
 

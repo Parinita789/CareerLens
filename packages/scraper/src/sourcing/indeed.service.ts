@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { chromium, type Browser } from 'playwright';
 import * as crypto from 'crypto';
 import * as path from 'path';
@@ -252,19 +253,18 @@ async function scrapeIndeedPage(
   return jobs;
 }
 
-export async function scrapeIndeed(
-  keywords: string,
-  location: string,
-  maxJobs: number = 25,
-): Promise<JobListing[]> {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-blink-features=AutomationControlled'],
-  });
+@Injectable()
+export class IndeedService {
+  async scrapeIndeed(keywords: string, location: string, maxJobs: number = 25): Promise<JobListing[]> {
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--disable-blink-features=AutomationControlled'],
+    });
 
-  try {
-    return await scrapeIndeedPage(browser, keywords, location, maxJobs);
-  } finally {
-    await browser.close();
+    try {
+      return await scrapeIndeedPage(browser, keywords, location, maxJobs);
+    } finally {
+      await browser.close();
+    }
   }
 }

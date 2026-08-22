@@ -12,8 +12,8 @@ import * as dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { connectToDatabase, disconnectDatabase } from '../db';
-import { preAnswerFields } from '../scraper/form-pre-answerer';
+import { connectToDatabase, disconnectDatabase } from '../persistence/db';
+import { preAnswerFields } from '../answer-resolution/form-pre-answerer.service';
 import { grade, pad, preview, type Expect } from './_lib';
 
 interface FieldFixture {

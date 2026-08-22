@@ -1,4 +1,4 @@
-import { loadProfile, loadAnswerRules } from '../db';
+import { loadProfile, loadAnswerRules } from '../persistence/db';
 import { llmChat } from '@job-agent/shared';
 import { ProfileAnswerModel } from '@job-agent/shared';
 import type { ScoredJob } from '../types';

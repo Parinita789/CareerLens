@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { smartMatchOption } from '../apply/greenhouse-apply';
+import { OptionMatcherService } from '../answer-resolution/option-matcher.service';
+
+const optionMatcherService = new OptionMatcherService();
+const smartMatchOption = optionMatcherService.smartMatchOption.bind(optionMatcherService);
 
 describe('smartMatchOption', () => {
   describe('exact match', () => {

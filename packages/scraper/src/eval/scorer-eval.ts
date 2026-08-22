@@ -11,9 +11,11 @@ import * as dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { connectToDatabase, disconnectDatabase } from '../db';
-import { scoreFitWithLLM } from '../scorer/llm-scorer';
+import { connectToDatabase, disconnectDatabase } from '../persistence/db';
+import { LlmScorerService } from '../scoring/llm-scorer.service';
 import { gradeRange, gradeArrayIncludes, gradeArrayExcludes, pad, type RangeExpect } from './_lib';
+
+const llmScorer = new LlmScorerService();
 
 interface Expect {
   fit_score?: RangeExpect;
@@ -80,7 +82,7 @@ async function main() {
     let actual: ScoreOutput | null = null;
     let errorMsg = '';
     try {
-      actual = (await scoreFitWithLLM(c.job)) as ScoreOutput;
+      actual = (await llmScorer.scoreFitWithLLM(c.job)) as ScoreOutput;
     } catch (err) {
       errorMsg = (err as Error).message;
     }
