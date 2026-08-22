@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import mongoose from 'mongoose';
@@ -44,9 +45,28 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('JobPilot API')
+    .setDescription(
+      'REST API consumed by the JobPilot frontend (packages/ui) — job tracking, cover ' +
+        'letters, the scrape/apply pipeline, application form answers, and candidate profile.',
+    )
+    .setVersion('1.0')
+    .addTag('jobs', 'Job listings, status, and cover letters')
+    .addTag('pipeline', 'Scrape/score/apply pipeline control and live logs')
+    .addTag('application-fields', 'Pre-scraped application form fields (Prepare tab)')
+    .addTag('form-answers', 'Q&A history, saved answer rules, and pending question prompts')
+    .addTag('profile', 'Candidate profile and resume upload')
+    .addTag('alerts', 'Saved LinkedIn job-alert search keywords')
+    .addTag('settings', 'Global pipeline settings (e.g. auto-submit toggle)')
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api/docs', app, swaggerDocument);
+
   const port = process.env.API_PORT ?? 3001;
   await app.listen(port);
   console.log(`API running on http://localhost:${port}`);
+  console.log(`API docs on http://localhost:${port}/api/docs`);
 }
 
 bootstrap();
