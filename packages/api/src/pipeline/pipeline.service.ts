@@ -39,7 +39,12 @@ const PHASE_LIST = [
     label: 'Gmail Alerts',
     name: 'gmail alerts',
     cmd: 'npx',
-    args: ['tsx', 'src/phase-gmail-alerts.ts', '--watch', '--interval=60'],
+    // Deliberately NOT --watch here. The phase runner waits for each process to
+    // exit before starting the next one, so a watcher would pin the pipeline as
+    // "running" until the timeout and starve any phase queued behind it. This
+    // runs one Gmail fetch and exits; the always-on watcher is still available
+    // as the standalone `npm run scraper:gmail-alerts` script.
+    args: ['tsx', 'src/phase-gmail-alerts.ts'],
   },
   {
     id: 'apply',
@@ -71,9 +76,18 @@ const COMMANDS: Record<
   },
 };
 
+// Auto-apply parks on a filled form waiting for the user to review and submit,
+// so a phase legitimately runs for a long time.
+const PHASE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+
 @Injectable()
 export class PipelineService {
-  private currentChild: ChildProcess | null = null;
+  // Every live child. runSelectedPhases deliberately lets an auto-apply run
+  // alongside an already-running pipeline, so a single-slot handle got
+  // clobbered by the second spawn: Stop would kill the auto-apply and orphan
+  // the scrape, and whichever child exited first would clear the handle for the
+  // one still running, leaving Stop with nothing to kill.
+  private activeChildren = new Set<ChildProcess>();
   private cancelled = false;
 
   private state: PipelineState = {
@@ -214,13 +228,21 @@ export class PipelineService {
   }
 
   stopPipeline(): void {
-    if (!this.state.running) return;
+    // A concurrent auto-apply can still be alive after the pipeline itself has
+    // finished, so don't bail purely on `running`.
+    if (!this.state.running && this.activeChildren.size === 0) return;
     this.cancelled = true;
-    if (this.currentChild) {
-      this.currentChild.kill('SIGTERM');
-      // Force kill after 3s if still alive
+
+    // Snapshot: the force-kill below must target exactly what was alive at stop
+    // time, never something spawned during the 3s grace period.
+    const children = [...this.activeChildren];
+    for (const child of children) child.kill('SIGTERM');
+    if (children.length > 0) {
       setTimeout(() => {
-        if (this.currentChild) this.currentChild.kill('SIGKILL');
+        // Still in the set means 'close' never fired — it ignored SIGTERM.
+        for (const child of children) {
+          if (this.activeChildren.has(child)) child.kill('SIGKILL');
+        }
       }, 3000);
     }
     this.addLog('--- Pipeline stopped by user ---');
@@ -278,7 +300,21 @@ export class PipelineService {
         env: { ...process.env, FORCE_COLOR: '0' },
       });
 
-      this.currentChild = child;
+      this.activeChildren.add(child);
+
+      // Cleared on exit. Previously this timer was never cancelled, so every
+      // spawn left a 2-hour handle holding the child in a closure — even for
+      // runs that finished in seconds.
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGKILL');
+      }, PHASE_TIMEOUT_MS);
+
+      const settle = () => {
+        clearTimeout(timeout);
+        this.activeChildren.delete(child);
+      };
 
       child.stdout.on('data', (data: Buffer) => {
         const lines = data.toString().split('\n').filter(Boolean);
@@ -297,10 +333,10 @@ export class PipelineService {
       });
 
       child.on('close', (code) => {
-        this.currentChild = null;
-        if (this.cancelled) {
-          resolve();
-        } else if (code === 0) {
+        settle();
+        if (timedOut) {
+          reject(new Error('Timed out after 2 hours'));
+        } else if (this.cancelled || code === 0) {
           resolve();
         } else {
           reject(new Error(`Process exited with code ${code}`));
@@ -308,15 +344,9 @@ export class PipelineService {
       });
 
       child.on('error', (err) => {
-        this.currentChild = null;
+        settle();
         reject(err);
       });
-
-      // timeout after 2 hours (auto-apply needs time for user to fill forms)
-      setTimeout(() => {
-        child.kill();
-        reject(new Error('Timed out after 2 hours'));
-      }, 7200000);
     });
   }
 }
