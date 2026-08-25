@@ -3298,3 +3298,35 @@ h1 {
   background: var(--accent);
   color: white;
 }
+
+/* Queue rows for roles already tracked elsewhere (applied, declined, etc.).
+   Same shape as .new-badge, colour-coded by what the status means: blue for
+   in-flight, green for accepted, red/amber for closed out. */
+.tracked-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  vertical-align: middle;
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+.tracked-badge.interviewing {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+.tracked-badge.accepted {
+  background: var(--green-dim);
+  color: var(--green);
+}
+.tracked-badge.declined {
+  background: var(--red-dim);
+  color: var(--red);
+}
+.tracked-badge.no_response {
+  background: var(--orange-dim);
+  color: var(--orange);
+}

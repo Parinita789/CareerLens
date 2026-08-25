@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import type { ScoredJob } from '../types';
-import { INTERVIEW_ROUNDS, ACCEPTED_OUTCOMES } from './app';
+import { INTERVIEW_ROUNDS, ACCEPTED_OUTCOMES, roleKey } from './app';
+
+// Shown on a Queue row when the same role is already tracked elsewhere, so an
+// already-handled job is obvious without cross-checking the Applied tab.
+const TRACKED_BADGE_LABELS: Record<string, string> = {
+  applied: 'Applied',
+  no_response: 'No response',
+  declined: 'Declined',
+  interviewing: 'Interviewing',
+  accepted: 'Accepted',
+};
 
 type Tab = 'queue' | 'applied' | 'interviewing' | 'accepted' | 'rejected' | 'prepare';
 
@@ -29,6 +39,8 @@ interface JobTableProps {
   ) => void;
   onAutoApply?: (jobIds: string[]) => void;
   onCancelSelect?: () => void;
+  /** roleKey -> the status this role already has elsewhere, for the Queue badge. */
+  trackedStatusByRole?: Map<string, string>;
 }
 
 function formatSalary(min?: number, max?: number): string {
@@ -54,7 +66,7 @@ function scoreClass(score: number): string {
   return 'low';
 }
 
-export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect }: JobTableProps) {
+export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect, trackedStatusByRole }: JobTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) => {
@@ -195,7 +207,23 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
               {job.company}
               {isNew(job.scraped_at) && <span className="new-badge">New</span>}
             </td>
-            <td>{job.title}</td>
+            <td>
+              {job.title}
+              {activeTab === 'queue' &&
+                (() => {
+                  // Only meaningful for a different record — a job is trivially
+                  // "tracked" as itself once its own status changes.
+                  const tracked = trackedStatusByRole?.get(roleKey(job));
+                  return tracked && tracked !== job.status ? (
+                    <span
+                      className={`tracked-badge ${tracked}`}
+                      title={`You already have this role tracked as "${TRACKED_BADGE_LABELS[tracked] ?? tracked}"`}
+                    >
+                      {TRACKED_BADGE_LABELS[tracked] ?? tracked}
+                    </span>
+                  ) : null;
+                })()}
+            </td>
             <td>
               <span className="salary">
                 {formatSalary(job.salary_min, job.salary_max)}

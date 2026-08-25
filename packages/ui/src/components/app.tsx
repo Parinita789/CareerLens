@@ -41,7 +41,7 @@ const TRACKED_STATUSES = ['applied', 'no_response', 'declined', 'interviewing', 
 
 // Identity for "the same role", used to reconcile records created by different
 // paths (scraper vs. manual add) that share no id or URL.
-const roleKey = (j: { company?: string; title?: string }) =>
+export const roleKey = (j: { company?: string; title?: string }) =>
   `${String(j.company ?? '').trim().toLowerCase()}|||${String(j.title ?? '').trim().toLowerCase()}`;
 
 // Outcomes for the Accepted tab — "accepted" here means the *application* was
@@ -255,15 +255,17 @@ export function App() {
   // Split by status FIRST — these arrays drive the tab badge counts and must
   // reflect totals, not the currently-applied filter (otherwise filtering on
   // Queue makes the Applied/Accepted badges shrink too).
-  // A role you're already tracking shouldn't still sit in the Queue asking to be
-  // applied to. This happens when a scraped role is later added by hand from the
-  // Applied tab — two records for the same job, the original left behind as
-  // to_apply. Matched on trimmed, lowercased company + title, since the two
-  // records come from different code paths and won't share an id or URL.
-  const trackedKeys = new Set(
-    jobs.filter((j) => TRACKED_STATUSES.includes(j.status)).map(roleKey),
-  );
-  const queue = jobs.filter((j) => j.status === 'to_apply' && !trackedKeys.has(roleKey(j)));
+  const queue = jobs.filter((j) => j.status === 'to_apply');
+
+  // A role can sit in the Queue while the same role is already tracked as
+  // applied — a scraped record plus a hand-added one, which share no id or URL,
+  // so they're matched on trimmed company + title. Rather than hiding the row,
+  // the Queue badges it with the status it already has, so it's obvious you've
+  // dealt with it without cross-checking the Applied tab.
+  const trackedStatusByRole = new Map<string, string>();
+  for (const j of jobs) {
+    if (TRACKED_STATUSES.includes(j.status)) trackedStatusByRole.set(roleKey(j), j.status);
+  }
   // Interviewing and Accepted have their own tabs, so they're pulled out of
   // Applied. 'declined' deliberately stays here: it's a terminal outcome of an
   // application, not a separate stage, so the role keeps its row in Applied
@@ -489,6 +491,7 @@ export function App() {
             activeTab={activeTab}
             selectMode={autoApplyMode}
             sortBy={sortBy}
+            trackedStatusByRole={trackedStatusByRole}
             onSelectJob={setSelectedJob}
             onDismissJob={handleDismissJob}
             onMarkApplied={handleMarkApplied}
