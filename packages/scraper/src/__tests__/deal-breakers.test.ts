@@ -30,6 +30,7 @@ const baseJob = {
   description: 'Build backend services with Node.js and TypeScript',
   source: 'greenhouse' as const,
   location: 'San Francisco, CA',
+  remote: false,
   employment_type: 'Full-time',
   scraped_at: new Date().toISOString(),
 };
@@ -121,5 +122,56 @@ describe('checkDealBreakers', () => {
       const result = checkDealBreakers({ ...baseJob, location: 'Remote US' });
       expect(result.rejected).toBe(false);
     });
+  });
+
+  // The API scrapers used to gate on a 13-city US whitelist before a posting
+  // ever reached this rule, silently dropping real US roles in unlisted cities.
+  // That gate is gone, so this rule now decides every location on its own.
+  describe('US detection (sole location gate)', () => {
+    const keep = (location: string) =>
+      !checkDealBreakers({ ...baseJob, location }).rejected;
+
+    it.each([
+      // dropped by the old city whitelist despite being US
+      'Bellevue, Washington', 'Bellevue, WA', 'Menlo Park, CA', 'Charlotte, NC', 'USA',
+      'Bellevue, WA; Menlo Park, CA', 'Maryland; Virginia; Washington, D.C.',
+      // US metros the old whitelist never listed
+      'Atlanta, GA', 'Portland, OR', 'San Diego, CA', 'Nashville, TN', 'Dallas, TX',
+      'Philadelphia, PA', 'Phoenix, AZ', 'Raleigh, NC', 'Salt Lake City, UT',
+      'Miami, FL', 'Detroit, MI', 'Pittsburgh, PA',
+    ])('keeps US location %s', (loc) => {
+      expect(keep(loc)).toBe(true);
+    });
+
+    it.each([
+      // these four leaked through the previous country blacklist
+      'Belgrade, Serbia', 'Aarhus, Denmark', 'Zurich, Switzerland', 'Ljubljana, Slovenia',
+      // never listed anywhere
+      'Lisbon, Portugal', 'Prague, Czech Republic', 'Vienna, Austria',
+      'Helsinki, Finland', 'Seoul, South Korea', 'Dubai, UAE',
+      // already handled, must stay handled
+      'Bengaluru, India', 'Amsterdam, Netherlands', 'Toronto, Canada',
+      'Vancouver, British Columbia, Canada', 'Berlin, Germany', 'Tokyo, Japan',
+    ])('rejects non-US location %s', (loc) => {
+      expect(keep(loc)).toBe(false);
+    });
+
+    it.each([
+      // two-letter state codes are only trusted after a comma, because OR / IN /
+      // ME / HI / DE / LA are ordinary words and ", Canada" begins with "ca"
+      ['Remote or Hybrid', 'OR would match Oregon'],
+      ['Somewhere in Europe', 'IN would match Indiana'],
+      ['Ontario, Canada', '", ca" would match California'],
+      ['Tbilisi, Georgia', 'Georgia is also a US state'],
+    ])('does not mistake %s for US (%s)', (loc) => {
+      expect(keep(loc)).toBe(false);
+    });
+
+    it.each(['Remote', 'Anywhere', ''])(
+      'keeps ambiguous location %s rather than risk losing a US role',
+      (loc) => {
+        expect(keep(loc)).toBe(true);
+      },
+    );
   });
 });

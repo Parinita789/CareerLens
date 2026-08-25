@@ -1,153 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
 import type { JobListing } from '../types';
+import { isRelevantRole } from '../common/role-filter';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function isRelevantRole(title: string, description: string, location: string): boolean {
-  const t = title.toLowerCase();
-  const d = description.toLowerCase();
-  const loc = location.toLowerCase();
-
-  // ── Hard excludes on title — instant reject ───────────────────────
-  const titleExcludes = [
-    'frontend',
-    'front-end',
-    'ios ',
-    'android',
-    'data scientist',
-    'machine learning engineer',
-    'designer',
-    'ux ',
-    'product manager',
-    ' pm ',
-    'sales ',
-    'recruiter',
-    'marketing',
-    'finance',
-    'legal',
-    'test engineer',
-    'sdet',
-    'qa engineer',
-    'devrel',
-    'developer advocate',
-    'embedded',
-    'firmware',
-    'hardware',
-    'data analyst',
-    'analytics engineer',
-    'junior',
-    'intern ',
-    'graduate new',
-    'php developer',
-    'ruby developer',
-    '.net developer',
-    'java developer',
-    'android developer',
-  ];
-  if (titleExcludes.some((k) => t.includes(k))) return false;
-
-  // ── Must be a software/backend/platform role ──────────────────────
-  const roleTitles = [
-    'software engineer',
-    'software developer',
-    'backend engineer',
-    'back-end engineer',
-    'platform engineer',
-    'fullstack',
-    'full stack',
-    'senior engineer',
-    'senior developer',
-    'engineer ii',
-    'engineer iii',
-    'engineer iv',
-    'api engineer',
-    'infrastructure engineer',
-    'engineer,',
-    'engineer -',
-  ];
-  const hasRoleTitle = roleTitles.some((k) => t.includes(k));
-  if (!hasRoleTitle) return false;
-
-  // ── Tech check — title OR description (much more permissive) ──────
-  const techSignals = [
-    'node',
-    'typescript',
-    'javascript',
-    'golang',
-    ' go ',
-    'nestjs',
-    'express',
-    'fastify',
-    'next.js',
-    'microservice',
-    'distributed',
-    'event-driven',
-    'api',
-    'rest',
-    'graphql',
-    'aws',
-    'gcp',
-    'azure',
-    'cloud',
-    'docker',
-    'kubernetes',
-    'k8s',
-    'mongodb',
-    'postgresql',
-    'postgres',
-    'redis',
-    'kafka',
-    'rabbitmq',
-    'pubsub',
-    'backend',
-    'back-end',
-    'server-side',
-    'scalab',
-    'high-traffic',
-    'high traffic',
-    'latency',
-    'throughput',
-    'distributed system',
-  ];
-
-  // check title first (strong signal)
-  const titleHasTech = techSignals.some((k) => t.includes(k));
-
-  // check description (weaker signal — only need 2+ matches)
-  const descMatches = techSignals.filter((k) => d.includes(k)).length;
-  const descHasTech = descMatches >= 2;
-
-  if (!titleHasTech && !descHasTech) return false;
-
-  // ── Location filter ───────────────────────────────────────────────
-  const remoteHybridSignals = [
-    'remote',
-    'hybrid',
-    'distributed',
-    'united states',
-    'us only',
-    'us-based',
-    'anywhere',
-    'san francisco',
-    'new york',
-    'seattle',
-    'austin',
-    'los angeles',
-    'denver',
-    'chicago',
-    'boston',
-    'california',
-    'bay area',
-  ];
-
-  const isRemoteHybrid =
-    location === '' ||
-    location.toLowerCase() === 'anywhere' ||
-    remoteHybridSignals.some((k) => loc.includes(k));
-
-  return isRemoteHybrid;
-}
 
 @Injectable()
 export class LeverService {
@@ -183,7 +40,6 @@ export class LeverService {
       for (const posting of postings) {
         const title = posting.text ?? '';
         const location = posting.categories?.location ?? posting.workplaceType ?? '';
-        const team = posting.categories?.team ?? '';
 
         // build description from lever's structured format
         const description = [
@@ -196,7 +52,7 @@ export class LeverService {
           .replace(/\s+/g, ' ')
           .trim();
 
-        if (!isRelevantRole(title, description, `${location} ${team}`)) continue;
+        if (!isRelevantRole(title, description)) continue;
 
         jobs.push({
           id: crypto
