@@ -1,9 +1,12 @@
 import 'reflect-metadata';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { format } from 'node:util';
 import { NestFactory } from '@nestjs/core';
 import { connectToDatabase, disconnectDatabase } from './persistence/db';
 import { TARGET_COMPANIES } from './common/company-directory';
+import { Limiter } from './common/limiter';
 import { AppModule } from './app.module';
 import { DealBreakerService } from './scoring/deal-breakers.service';
 import { LlmScorerService } from './scoring/llm-scorer.service';
@@ -36,6 +39,42 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LLM_CONCURRENCY = 3;
 const MAX_JOB_AGE_DAYS = 14;
+
+// ── Cross-source concurrency ──────────────────────────────────────
+// Sources run in parallel (see main), which would otherwise multiply every
+// per-source limit by the number of sources. These caps are global, so total
+// load on the LLM and on memory stays exactly where it was when sources ran
+// one at a time.
+
+// Total in-flight LLM scoring calls across every source. Without this, four
+// parallel sources would each run LLM_CONCURRENCY calls at once.
+const llmLimiter = new Limiter(LLM_CONCURRENCY);
+
+// Form pre-scraping launches its own Chrome (3 pages). Capped at 1 so parallel
+// sources can't stack several browsers on top of LinkedIn's — that was the
+// memory pressure the gmail-alerts scraper already had to dial back for.
+const formScrapeLimiter = new Limiter(1);
+
+// Sources interleave their output once they run concurrently, so every line is
+// tagged with the source that produced it. AsyncLocalStorage carries the tag
+// through awaits into the service layer, so logs written deep inside a scraper
+// are attributed correctly without threading a parameter through everything.
+const sourceTag = new AsyncLocalStorage<string>();
+function installSourceTaggedLogging(): void {
+  const base = { log: console.log.bind(console), error: console.error.bind(console) };
+  const wrap =
+    (emit: (line: string) => void) =>
+    (...args: unknown[]) => {
+      const tag = sourceTag.getStore();
+      const text = format(...args);
+      if (!tag) return emit(text);
+      // Tag per line so multi-line output stays attributable.
+      for (const line of text.split('\n')) emit(line.length > 0 ? `[${tag}] ${line}` : '');
+    };
+  console.log = wrap(base.log);
+  console.error = wrap(base.error);
+}
+
 // Skip postings older than MAX_JOB_AGE_DAYS. Jobs with no posted_at pass through —
 function isFresh(postedAt?: string): boolean {
   if (!postedAt) return true;
@@ -107,7 +146,9 @@ async function persistJobs(jobs: ScoredJob[], persistence: ScraperPersistenceSer
 async function scoreBatch(batch: JobListing[], scorer: LlmScorerService): Promise<ScoredJob[]> {
   const promises = batch.map(async (job) => {
     try {
-      const score = await scorer.scoreFitWithLLM(job);
+      // Through the global limiter — a batch may be one of several submitted by
+      // different sources at the same moment.
+      const score = await llmLimiter.run(() => scorer.scoreFitWithLLM(job));
       return {
         ...job,
         ...score,
@@ -252,7 +293,9 @@ async function dedupFilterScore(
   if (highScoreJobs.length > 0) {
     try {
       console.log(`\n  Pre-scraping forms for ${highScoreJobs.length} high-score jobs...`);
-      await services.formScraper.scrapeApplicationForms(highScoreJobs);
+      await formScrapeLimiter.run(() =>
+        services.formScraper.scrapeApplicationForms(highScoreJobs),
+      );
     } catch (err) {
       console.error(`  Form pre-scrape failed: ${(err as Error).message}`);
     }
@@ -266,7 +309,152 @@ async function dedupFilterScore(
   };
 }
 
+// ── Per-source runners ────────────────────────────────────────────
+// Each drives one platform end to end. Kept internally sequential (one company
+// or query at a time, with the scrapers' own politeness delays intact) so that
+// running them concurrently adds no extra load to any single platform.
+interface SourceContext {
+  services: Services;
+  seenIds: Set<string>;
+  seenKeys: Set<string>;
+  seenUrls: Set<string>;
+  existingIds: Set<string>;
+  stats: Record<string, SourceStats>;
+}
+
+// dedupFilterScore's dedup pass is synchronous, so concurrent sources cannot
+// interleave between its check and its add — the shared Sets stay correct.
+function scoreInto(ctx: SourceContext, jobs: JobListing[], label: string) {
+  return dedupFilterScore(
+    jobs,
+    label,
+    ctx.seenIds,
+    ctx.seenKeys,
+    ctx.seenUrls,
+    ctx.existingIds,
+    ctx.stats,
+    ctx.services,
+  );
+}
+
+async function runAshby(ctx: SourceContext): Promise<void> {
+  const companies = TARGET_COMPANIES.filter((c) => c.ats === 'ashby');
+  console.log(`Ashby — scraping ${companies.length} companies`);
+  for (const company of companies) {
+    const jobs = await ctx.services.ashby.scrapeAshby(company.slug, company.name);
+    if (jobs.length > 0) await scoreInto(ctx, jobs, company.name);
+  }
+}
+
+async function runGreenhouse(ctx: SourceContext): Promise<void> {
+  const companies = TARGET_COMPANIES.filter((c) => c.ats === 'greenhouse');
+  console.log(`Greenhouse — scraping ${companies.length} companies`);
+  for (const company of companies) {
+    const jobs = await ctx.services.greenhouse.scrapeGreenhouse(company.slug, company.name);
+    if (jobs.length > 0) await scoreInto(ctx, jobs, company.name);
+  }
+}
+
+async function runLever(ctx: SourceContext): Promise<void> {
+  const companies = TARGET_COMPANIES.filter((c) => c.ats === 'lever');
+  console.log(`Lever — scraping ${companies.length} companies`);
+  for (const company of companies) {
+    const jobs = await ctx.services.lever.scrapeLever(company.slug, company.name);
+    if (jobs.length > 0) await scoreInto(ctx, jobs, company.name);
+  }
+}
+
+async function runLinkedIn(ctx: SourceContext): Promise<void> {
+  for (const query of LINKEDIN_QUERIES) {
+    console.log(`Searching: "${query.keywords}" in ${query.location}`);
+    try {
+      const jobs = await ctx.services.linkedIn.scrapeLinkedIn(
+        query.keywords,
+        query.location,
+        LINKEDIN_JOBS_PER_QUERY,
+      );
+      console.log(`  Got ${jobs.length} jobs`);
+      if (jobs.length > 0) await scoreInto(ctx, jobs, `LinkedIn "${query.keywords}"`);
+    } catch (err) {
+      console.error(`  Failed: ${(err as Error).message}`);
+    }
+  }
+
+  // Gmail alerts — scrape + score per alert for real-time results
+  try {
+    console.log('LinkedIn Job Alerts:');
+    const alertsFile = path.join(__dirname, '../data/alerts.json');
+    let alerts: { label: string; keywords: string; location: string }[] = [];
+    try {
+      const fs = await import('fs');
+      if (fs.existsSync(alertsFile)) {
+        alerts = JSON.parse(fs.readFileSync(alertsFile, 'utf-8'));
+      }
+    } catch {
+      /* no alerts */
+    }
+
+    if (alerts.length > 0) {
+      for (const alert of alerts) {
+        console.log(`  Alert: "${alert.label}"`);
+        try {
+          const jobs = await ctx.services.linkedIn.scrapeLinkedIn(
+            alert.keywords,
+            alert.location,
+            50,
+          );
+          console.log(`  Got ${jobs.length} jobs`);
+          if (jobs.length > 0) await scoreInto(ctx, jobs, `Alert "${alert.label}"`);
+        } catch (err) {
+          console.error(`  Alert "${alert.label}" failed: ${(err as Error).message}`);
+        }
+      }
+    } else {
+      // Fallback to the combined function if no alerts.json
+      const alertJobs = await ctx.services.linkedInAlerts.scrapeLinkedInAlerts(50);
+      console.log(`  Got ${alertJobs.length} jobs from alerts`);
+      if (alertJobs.length > 0) await scoreInto(ctx, alertJobs, 'LinkedIn Alerts');
+    }
+  } catch (err) {
+    console.error(`  Alerts failed: ${(err as Error).message}`);
+  }
+}
+
+async function runIndeed(ctx: SourceContext): Promise<void> {
+  const indeedSeen = new Set<string>();
+  for (const query of INDEED_QUERIES) {
+    console.log(`Searching: "${query.keywords}" in ${query.location}`);
+    try {
+      const jobs = await ctx.services.indeed.scrapeIndeed(
+        query.keywords,
+        query.location,
+        INDEED_JOBS_PER_QUERY,
+      );
+      const newJobs = jobs.filter((j) => {
+        if (indeedSeen.has(j.id)) return false;
+        indeedSeen.add(j.id);
+        return true;
+      });
+      console.log(`  Got ${jobs.length} jobs (${jobs.length - newJobs.length} cross-query dupes)`);
+      if (newJobs.length > 0) await scoreInto(ctx, newJobs, `Indeed "${query.keywords}"`);
+    } catch (err) {
+      console.error(`  Failed: ${(err as Error).message}`);
+    }
+  }
+}
+
+const SOURCE_RUNNERS: Record<Source, (ctx: SourceContext) => Promise<void>> = {
+  ashby: runAshby,
+  greenhouse: runGreenhouse,
+  linkedin: runLinkedIn,
+  lever: runLever,
+  indeed: runIndeed,
+};
+
+
 async function main() {
+  installSourceTaggedLogging();
+
   const sourcesArg = process.argv.find((a) => a.startsWith('--sources='));
   const sources: Source[] = sourcesArg
     ? (sourcesArg.split('=')[1].split(',') as Source[])
@@ -301,183 +489,54 @@ async function main() {
   const seenKeys = new Set(existingJobs.map((j) => `${j.company}|||${j.title}`.toLowerCase()));
   const seenUrls = new Set(existingJobs.map((j) => j.url).filter(Boolean));
 
-  const enabled = new Set(sources);
   const stats: Record<string, SourceStats> = {};
 
   // Ensure every enabled source appears in the summary even if it scraped nothing —
   // a "scraped=0" row for LinkedIn is the whole point (catches silent login failures).
   for (const s of sources) stats[s] = emptySourceStats();
 
-  // ── Source: Ashby (API-based, score per company — jobs appear before LinkedIn) ──
-  if (enabled.has('ashby')) {
-    console.log('━'.repeat(45));
-    console.log('SOURCE — Ashby (direct career page API)');
-    console.log('━'.repeat(45) + '\n');
+  // ── Run every enabled source concurrently ────────────────────────
+  // Platforms are independent — separate hosts, separate rate limits — so there
+  // is no reason for Greenhouse to sit idle while LinkedIn drives a browser for
+  // ten minutes. Each source stays internally sequential, so no single platform
+  // sees more traffic than before; total wall time becomes roughly the slowest
+  // source rather than the sum of all of them.
+  const ctx: SourceContext = { services, seenIds, seenKeys, seenUrls, existingIds, stats };
 
-    const ashbyCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'ashby');
-
-    for (const company of ashbyCompanies) {
-      const jobs = await services.ashby.scrapeAshby(company.slug, company.name);
-      if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
-      }
-    }
+  // Unknown names used to be skipped silently by an `enabled.has()` check; with
+  // a runner lookup they'd throw instead, so filter and say what was ignored.
+  const unknown = sources.filter((s) => !SOURCE_RUNNERS[s]);
+  if (unknown.length > 0) {
+    console.log(`Ignoring unknown source(s): ${unknown.join(', ')}`);
+  }
+  const active = sources.filter((s) => SOURCE_RUNNERS[s]);
+  if (active.length === 0) {
+    console.log('No known sources selected — nothing to scrape.\n');
+  } else {
+    console.log(`Running ${active.length} source(s) in parallel: ${active.join(', ')}\n`);
   }
 
-  // ── Source: Greenhouse (API-based, score per company for real-time results) ──
-  if (enabled.has('greenhouse')) {
-    console.log('━'.repeat(45));
-    console.log('SOURCE — Greenhouse (scrape + score per company)');
-    console.log('━'.repeat(45) + '\n');
+  const startedAt = Date.now();
+  const results = await Promise.allSettled(
+    active.map((source) =>
+      // sourceTag.run tags every line this source logs, including from inside
+      // the service layer, so interleaved output stays readable.
+      sourceTag.run(source, async () => {
+        const t0 = Date.now();
+        await SOURCE_RUNNERS[source](ctx);
+        console.log(`done in ${Math.round((Date.now() - t0) / 1000)}s`);
+      }),
+    ),
+  );
 
-    const greenhouseCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'greenhouse');
-
-    for (const company of greenhouseCompanies) {
-      const jobs = await services.greenhouse.scrapeGreenhouse(company.slug, company.name);
-      if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
-      }
+  // allSettled, not all: one source failing must not abandon the others' work.
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`Source "${active[i]}" failed: ${(r.reason as Error)?.message ?? r.reason}`);
     }
-  }
+  });
+  console.log(`\nAll sources finished in ${Math.round((Date.now() - startedAt) / 1000)}s`);
 
-  // ── Source 2: LinkedIn (score per query for real-time results) ──
-  if (enabled.has('linkedin')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — LinkedIn (scrape + score per query)');
-    console.log('━'.repeat(45));
-
-    for (const query of LINKEDIN_QUERIES) {
-      console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
-      try {
-        const jobs = await services.linkedIn.scrapeLinkedIn(query.keywords, query.location, LINKEDIN_JOBS_PER_QUERY);
-        console.log(`  Got ${jobs.length} jobs`);
-        if (jobs.length > 0) {
-          await dedupFilterScore(
-            jobs,
-            `LinkedIn "${query.keywords}"`,
-            seenIds,
-            seenKeys,
-            seenUrls,
-            existingIds,
-            stats,
-            services,
-          );
-        }
-      } catch (err) {
-        console.error(`  Failed: ${(err as Error).message}`);
-      }
-    }
-
-    // Gmail alerts — scrape + score per alert for real-time results
-    try {
-      console.log('\nLinkedIn Job Alerts:');
-      const alertsFile = path.join(__dirname, '../data/alerts.json');
-      let alerts: { label: string; keywords: string; location: string }[] = [];
-      try {
-        const fs = await import('fs');
-        if (fs.existsSync(alertsFile)) {
-          alerts = JSON.parse(fs.readFileSync(alertsFile, 'utf-8'));
-        }
-      } catch {
-        /* no alerts */
-      }
-
-      if (alerts.length > 0) {
-        for (const alert of alerts) {
-          console.log(`\n  Alert: "${alert.label}"`);
-          try {
-            const jobs = await services.linkedIn.scrapeLinkedIn(alert.keywords, alert.location, 50);
-            console.log(`  Got ${jobs.length} jobs`);
-            if (jobs.length > 0) {
-              await dedupFilterScore(
-                jobs,
-                `Alert "${alert.label}"`,
-                seenIds,
-                seenKeys,
-                seenUrls,
-                existingIds,
-                stats,
-                services,
-              );
-            }
-          } catch (err) {
-            console.error(`  Alert "${alert.label}" failed: ${(err as Error).message}`);
-          }
-        }
-      } else {
-        // Fallback to the combined function if no alerts.json
-        const alertJobs = await services.linkedInAlerts.scrapeLinkedInAlerts(50);
-        console.log(`  Got ${alertJobs.length} jobs from alerts`);
-        if (alertJobs.length > 0) {
-          await dedupFilterScore(
-            alertJobs,
-            'LinkedIn Alerts',
-            seenIds,
-            seenKeys,
-            seenUrls,
-            existingIds,
-            stats,
-            services,
-          );
-        }
-      }
-    } catch (err) {
-      console.error(`  Alerts failed: ${(err as Error).message}`);
-    }
-  }
-
-  // ── Source 3: Lever (score per company for real-time results) ──
-  if (enabled.has('lever')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — Lever (scrape + score per company)');
-    console.log('━'.repeat(45) + '\n');
-
-    const leverCompanies = TARGET_COMPANIES.filter((c) => c.ats === 'lever');
-
-    for (const company of leverCompanies) {
-      const jobs = await services.lever.scrapeLever(company.slug, company.name);
-      if (jobs.length > 0) {
-        await dedupFilterScore(jobs, company.name, seenIds, seenKeys, seenUrls, existingIds, stats, services);
-      }
-    }
-  }
-
-  // ── Source 4: Indeed (if enabled) ──
-  if (enabled.has('indeed')) {
-    console.log('\n' + '━'.repeat(45));
-    console.log('SOURCE — Indeed (scrape + score)');
-    console.log('━'.repeat(45));
-
-    const indeedSeen = new Set<string>();
-    for (const query of INDEED_QUERIES) {
-      console.log(`\nSearching: "${query.keywords}" in ${query.location}`);
-      try {
-        const jobs = await services.indeed.scrapeIndeed(query.keywords, query.location, INDEED_JOBS_PER_QUERY);
-        const newJobs = jobs.filter((j) => {
-          if (indeedSeen.has(j.id)) return false;
-          indeedSeen.add(j.id);
-          return true;
-        });
-        console.log(
-          `  Got ${jobs.length} jobs (${jobs.length - newJobs.length} cross-query dupes)`,
-        );
-        if (newJobs.length > 0) {
-          await dedupFilterScore(
-            newJobs,
-            `Indeed "${query.keywords}"`,
-            seenIds,
-            seenKeys,
-            seenUrls,
-            existingIds,
-            stats,
-            services,
-          );
-        }
-      } catch (err) {
-        console.error(`  Failed: ${(err as Error).message}`);
-      }
-    }
-  }
 
   // ── Final summary ──
   const allJobs = await loadJobs(services.persistence);
