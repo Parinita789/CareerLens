@@ -7,6 +7,7 @@ import { NestFactory } from '@nestjs/core';
 import { connectToDatabase, disconnectDatabase } from './persistence/db';
 import { TARGET_COMPANIES } from './common/company-directory';
 import { Limiter } from './common/limiter';
+import { roleKey } from './common/role-key';
 import { AppModule } from './app.module';
 import { DealBreakerService } from './scoring/deal-breakers.service';
 import { LlmScorerService } from './scoring/llm-scorer.service';
@@ -195,7 +196,7 @@ async function dedupFilterScore(
 
   // Dedup
   let unique = rawJobs.filter((job) => {
-    const key = `${job.company}|||${job.title}`.toLowerCase();
+    const key = roleKey(job);
     if (seenIds.has(job.id) || existingIds.has(job.id)) return false;
     if (seenKeys.has(key)) return false;
     if (job.url && seenUrls.has(job.url)) return false;
@@ -486,7 +487,7 @@ async function main() {
 
   // Shared dedup sets — accumulate across sources
   const seenIds = new Set<string>();
-  const seenKeys = new Set(existingJobs.map((j) => `${j.company}|||${j.title}`.toLowerCase()));
+  const seenKeys = new Set(existingJobs.map(roleKey));
   const seenUrls = new Set(existingJobs.map((j) => j.url).filter(Boolean));
 
   const stats: Record<string, SourceStats> = {};

@@ -8,6 +8,7 @@ import { LlmScorerService } from './scoring/llm-scorer.service';
 import { QuickRejectService } from './scoring/quick-reject.service';
 import { ScraperPersistenceService } from './persistence/persistence.service';
 import { GmailAlertsService } from './sourcing/gmail-alerts.service';
+import { roleKey } from './common/role-key';
 import type { JobListing, ScoredJob } from './types';
 
 const LLM_CONCURRENCY = 5;
@@ -51,7 +52,7 @@ async function main(services: Services): Promise<number> {
 
   const existing = await services.persistence.loadExistingJobs();
   const existingIds = new Set(existing.map((j) => j.id));
-  const existingKeys = new Set(existing.map((j) => `${j.company}|||${j.title}`.toLowerCase()));
+  const existingKeys = new Set(existing.map(roleKey));
   const existingUrls = new Set(existing.map((j) => j.url).filter(Boolean));
   console.log(`Existing jobs in tracker: ${existing.length}\n`);
 
@@ -60,7 +61,7 @@ async function main(services: Services): Promise<number> {
 
   // Deduplicate
   const newJobs = alertJobs.filter((j) => {
-    const key = `${j.company}|||${j.title}`.toLowerCase();
+    const key = roleKey(j);
     if (existingIds.has(j.id)) return false;
     if (existingKeys.has(key)) return false;
     if (j.url && existingUrls.has(j.url)) return false;

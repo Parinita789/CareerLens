@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { JobModel, CoverLetterModel, generateCoverLetter as generateCoverLetterShared } from '@job-agent/shared';
 
+// Company/title come straight from user input and go into a RegExp, so anything
+// with regex metacharacters ("Yahoo! Inc.", "C++ Engineer") must be neutralised.
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 @Injectable()
 export class JobsService {
   async getAllJobs(): Promise<any[]> {
@@ -201,6 +207,32 @@ export class JobsService {
     const id = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const allowed = ['applied', 'interviewing', 'accepted', 'declined'];
     const status = allowed.includes(data.status ?? '') ? (data.status as string) : 'applied';
+
+    // If the scraper already found this role, adopt that record instead of
+    // inserting a second one. Without this, tracking a scraped role by hand left
+    // the original sitting in the Queue as 'to_apply' forever — the same job
+    // listed twice, in two different tabs. Matched on trimmed company + title,
+    // since the manual entry shares no id or URL with the scraped record.
+    const existing = await JobModel.findOne({
+      company: new RegExp(`^\\s*${escapeRegex(data.company.trim())}\\s*$`, 'i'),
+      title: new RegExp(`^\\s*${escapeRegex(data.title.trim())}\\s*$`, 'i'),
+    });
+    if (existing) {
+      existing.set({
+        status,
+        applied_at: new Date(),
+        applied_via: 'manual',
+        interview_round: status === 'interviewing' ? data.interview_round || null : null,
+        accepted_outcome: status === 'accepted' ? data.accepted_outcome || null : null,
+        // Keep the scraped url/description/score — they're richer than anything
+        // the manual form collects. Only fill url if we didn't already have one.
+        ...(data.url && !existing.url ? { url: data.url } : {}),
+      });
+      await existing.save();
+      const { _id, __v, ...rest } = existing.toObject();
+      return { ...rest, id: existing.externalId, reconciled: true };
+    }
+
     // applied_at is the day the user tracked the role; useful for accepted/
     // interviewing entries too so they sort correctly on those tabs.
     const job = await JobModel.create({

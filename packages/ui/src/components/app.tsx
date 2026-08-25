@@ -35,6 +35,15 @@ export const INTERVIEW_ROUNDS = [
   'Other',
 ] as const;
 
+// Statuses that mean "this application exists" — as opposed to 'to_apply' (not
+// applied yet) or 'rejected' (mostly the scorer's verdict, never an application).
+const TRACKED_STATUSES = ['applied', 'no_response', 'declined', 'interviewing', 'accepted'];
+
+// Identity for "the same role", used to reconcile records created by different
+// paths (scraper vs. manual add) that share no id or URL.
+const roleKey = (j: { company?: string; title?: string }) =>
+  `${String(j.company ?? '').trim().toLowerCase()}|||${String(j.title ?? '').trim().toLowerCase()}`;
+
 // Outcomes for the Accepted tab — "accepted" here means the *application* was
 // accepted (company moved you forward); these track what happened next.
 export const ACCEPTED_OUTCOMES = [
@@ -246,7 +255,15 @@ export function App() {
   // Split by status FIRST — these arrays drive the tab badge counts and must
   // reflect totals, not the currently-applied filter (otherwise filtering on
   // Queue makes the Applied/Accepted badges shrink too).
-  const queue = jobs.filter((j) => j.status === 'to_apply');
+  // A role you're already tracking shouldn't still sit in the Queue asking to be
+  // applied to. This happens when a scraped role is later added by hand from the
+  // Applied tab — two records for the same job, the original left behind as
+  // to_apply. Matched on trimmed, lowercased company + title, since the two
+  // records come from different code paths and won't share an id or URL.
+  const trackedKeys = new Set(
+    jobs.filter((j) => TRACKED_STATUSES.includes(j.status)).map(roleKey),
+  );
+  const queue = jobs.filter((j) => j.status === 'to_apply' && !trackedKeys.has(roleKey(j)));
   // Interviewing and Accepted have their own tabs, so they're pulled out of
   // Applied. 'declined' deliberately stays here: it's a terminal outcome of an
   // application, not a separate stage, so the role keeps its row in Applied
