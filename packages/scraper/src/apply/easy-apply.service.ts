@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import { PATHS } from '../config';
 import type { ScoredJob } from '../types';
 import { FormHandlerService } from './form-handler.service';
-import { QuestionAnswererService } from '../answer-resolution/question-answerer.service';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const randomDelay = () => sleep(1500 + Math.random() * 2000);
@@ -17,7 +16,6 @@ export type ApplicationResult =
 export class EasyApplyService {
   constructor(
     @Inject(FormHandlerService) private readonly formHandler: FormHandlerService,
-    @Inject(QuestionAnswererService) private readonly questionAnswerer: QuestionAnswererService,
   ) {}
 
   async applyViaEasyApply(page: Page, job: ScoredJob, submit: boolean = false): Promise<ApplicationResult> {
@@ -51,7 +49,6 @@ export class EasyApplyService {
       }
 
       console.log('  Easy Apply button found — opening form...');
-      this.questionAnswerer.setCurrentJob({ id: job.id, title: job.title, company: job.company });
       await easyApplyBtn.click();
       await randomDelay();
 

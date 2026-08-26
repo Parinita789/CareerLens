@@ -367,7 +367,18 @@ export class AshbyFormFillerService {
   console.log('  [Ashby] Section 2d0: yes/no button groups');
   // 2d0. Handle Ashby custom Yes/No question (rendered as <button> pair, not checkbox/radio)
   try {
-    const yesNoContainers = await page.$$('[class*="yesno"]');
+    // The class matches each option <button> as well as the wrapper holding the
+    // pair, so a single question turns up three times. Only the wrapper can be
+    // acted on; the buttons just re-resolve the same question and find nothing to
+    // click — one Vanta form asked about sponsorship four times over.
+    const yesNoCandidates = await page.$$('[class*="yesno"]');
+    const yesNoContainers = [];
+    for (const candidate of yesNoCandidates) {
+      const holdsPair = await candidate
+        .evaluate((el) => el.querySelectorAll('button').length >= 2)
+        .catch(() => false);
+      if (holdsPair) yesNoContainers.push(candidate);
+    }
     for (const container of yesNoContainers) {
       try {
         // Find question label — walk up to the field entry wrapper

@@ -3,6 +3,7 @@ import type { Page } from 'playwright';
 import { GreenhouseApplyService, type ApplicationResult as GreenhouseApplicationResult } from './greenhouse/greenhouse-apply.service';
 import { EasyApplyService, type ApplicationResult as EasyApplyApplicationResult } from './easy-apply.service';
 import { LinkedInProbeService } from '../sourcing/linkedin-probe.service';
+import { QuestionAnswererService } from '../answer-resolution/question-answerer.service';
 import type { ScoredJob } from '../types';
 
 export type ApplyResult = GreenhouseApplicationResult | EasyApplyApplicationResult;
@@ -13,9 +14,25 @@ export class ApplyOrchestratorService {
     @Inject(GreenhouseApplyService) private readonly greenhouseApply: GreenhouseApplyService,
     @Inject(EasyApplyService) private readonly easyApply: EasyApplyService,
     @Inject(LinkedInProbeService) private readonly linkedInProbe: LinkedInProbeService,
+    @Inject(QuestionAnswererService) private readonly questionAnswerer: QuestionAnswererService,
   ) {}
 
   async applyToJob(page: Page, job: ScoredJob, submit: boolean): Promise<ApplyResult> {
+    // Tag every question answered from here on with this job. It has to happen at
+    // this single entry point: QuestionAnswererService is a process-wide singleton
+    // and phase4 applies every job in one process, so before this the Greenhouse
+    // and Ashby paths — which never set it — logged their answers under whichever
+    // job the previous LinkedIn Easy Apply had left behind.
+    this.questionAnswerer.setCurrentJob({ id: job.id, title: job.title, company: job.company });
+    try {
+      return await this.dispatch(page, job, submit);
+    } finally {
+      // Dropping a row beats misfiling it under the next job.
+      this.questionAnswerer.clearCurrentJob();
+    }
+  }
+
+  private async dispatch(page: Page, job: ScoredJob, submit: boolean): Promise<ApplyResult> {
     if (job.source === 'greenhouse' || job.source === 'ashby') {
       return this.greenhouseApply.apply(page, job, submit);
     }
