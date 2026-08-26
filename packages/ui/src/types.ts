@@ -1,4 +1,9 @@
-export type JobSource = 'linkedin' | 'greenhouse' | 'lever' | 'indeed';
+// Deliberately declared here rather than imported from @job-agent/shared: that
+// package's barrel also exports the Mongoose schemas, DB connection and LLM
+// clients, none of which belong in a browser bundle. Keep this union in step
+// with the shared one — it had gone stale and omitted 'ashby', which is one of
+// the busiest sources.
+export type JobSource = 'linkedin' | 'greenhouse' | 'lever' | 'indeed' | 'ashby';
 export type JobStatus = 'to_apply' | 'applied' | 'rejected' | 'no_response' | 'interviewing' | 'accepted' | 'declined';
 
 export interface ScoredJob {

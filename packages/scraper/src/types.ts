@@ -1,33 +1,9 @@
-export type JobSource = 'linkedin' | 'greenhouse' | 'lever' | 'indeed';
-
-export type JobStatus = 'to_apply' | 'applied' | 'rejected' | 'no_response' | 'interviewing' | 'accepted' | 'declined';
-
-export interface JobListing {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  remote: boolean;
-  employment_type: string;
-  salary_min?: number;
-  salary_max?: number;
-  description: string;
-  url: string;
-  source: JobSource;
-  scraped_at: string;
-  posted_at?: string;
-}
-
-export interface ScoredJob extends JobListing {
-  fit_score: number;
-  apply: boolean;
-  matched_skills: string[];
-  missing_skills: string[];
-  reason: string;
-  deal_breaker?: string;
-  status: JobStatus;
-  applied_at?: string;
-  applied_via?: 'auto' | 'manual';
-  cover_letter?: string;
-  notes?: string;
-}
+// These types live in @job-agent/shared, next to the Mongoose schemas that
+// persist them. This file used to be a hand-copy and had drifted: it never
+// gained the 'ashby' source, even though the scraper has been emitting Ashby
+// jobs since sourcing/ashby.service.ts was added. That single missing string
+// literal was behind seven type errors across the apply pipeline.
+//
+// Re-exported rather than deleted so the ~40 `from '../types'` imports keep
+// working; there is nothing scraper-specific left to declare here.
+export type { JobSource, JobStatus, JobListing, ScoredJob } from '@job-agent/shared';

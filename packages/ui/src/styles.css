@@ -458,6 +458,7 @@ h1 {
 .platform.greenhouse { background: var(--green-dim); color: var(--green); }
 .platform.lever { background: var(--orange-dim); color: var(--orange); }
 .platform.indeed { background: rgba(44, 94, 199, 0.15); color: #6b8de3; }
+.platform.ashby { background: var(--yellow-dim); color: var(--yellow); }
 
 /* Auto Apply Bar */
 .auto-apply-bar {
