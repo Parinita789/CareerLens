@@ -3,10 +3,7 @@ import type { Page } from 'playwright';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { ScoredJob } from '../../types';
-import { OptionMatcherService } from '../../answer-resolution/option-matcher.service';
-import { DirectAnswerService } from '../../answer-resolution/direct-answer.service';
-import { QuestionAnswererService } from '../../answer-resolution/question-answerer.service';
-import { isRefusalText } from '../../answer-resolution/refusal';
+import { FieldAnswerResolverService } from '../../answer-resolution/field-answer-resolver.service';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -39,9 +36,7 @@ function readAshbyOptionText(el: Element): string {
 @Injectable()
 export class AshbyFormFillerService {
   constructor(
-    @Inject(OptionMatcherService) private readonly optionMatcher: OptionMatcherService,
-    @Inject(DirectAnswerService) private readonly directAnswer: DirectAnswerService,
-    @Inject(QuestionAnswererService) private readonly questionAnswerer: QuestionAnswererService,
+    @Inject(FieldAnswerResolverService) private readonly fieldAnswers: FieldAnswerResolverService,
   ) {}
 
   async fillAshbyForm(
@@ -51,6 +46,9 @@ export class AshbyFormFillerService {
   getPreScrapedAnswer: (fieldId: string, label: string) => string | null,
 ): Promise<void> {
   console.log('  Filling Ashby form...');
+  // One memo for this form: Ashby nests the same question in several containers,
+  // and without this each repeat re-reads the rules and logs a duplicate answer.
+  const answerCache = this.fieldAnswers.newCache();
   console.log('  [Ashby] Section 1: resume upload');
   // 1. Upload resume FIRST (Ashby re-renders form after upload)
   try {
@@ -194,13 +192,15 @@ export class AshbyFormFillerService {
             ''
           ).replace(/, USA$/, '');
         else {
-          // Try pre-scraped or rules
-          const preAnswer = getPreScrapedAnswer(id, label || placeholder);
-          if (preAnswer) value = preAnswer;
-          if (!value) {
-            const directAnswer = this.directAnswer.getDirectAnswer(id, label || placeholder, profile);
-            if (directAnswer) value = directAnswer;
-          }
+          const resolved = await this.fieldAnswers.resolve({
+            fieldId: id,
+            label: label || placeholder,
+            type: 'text',
+            profile,
+            getPreScrapedAnswer,
+            cache: answerCache,
+          });
+          if (resolved) value = resolved.value;
         }
 
         if (value) {
@@ -248,25 +248,18 @@ export class AshbyFormFillerService {
         opts.map((o) => (o as HTMLOptionElement).text.trim()),
       );
 
-      // Get answer from profile
-      const answer = this.directAnswer.getDirectAnswer('', label, profile, 'select');
-      if (answer) {
-        const matched = this.optionMatcher.smartMatchOption(answer, options, label);
-        if (matched) {
-          await sel.selectOption({ label: matched });
-          console.log(`    ✓ Select: "${label}" → "${matched}"`);
-          continue;
-        }
-      }
-      // Try pre-scraped
-      const preAnswer = getPreScrapedAnswer('', label);
-      if (preAnswer) {
-        const matched = this.optionMatcher.smartMatchOption(preAnswer, options, label);
-        if (matched) {
-          await sel.selectOption({ label: matched });
-          console.log(`    ✓ Select (pre-scraped): "${label}" → "${matched}"`);
-          continue;
-        }
+      const resolved = await this.fieldAnswers.resolve({
+        label,
+        type: 'select',
+        options,
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+      });
+      if (resolved) {
+        await sel.selectOption({ label: resolved.value });
+        console.log(`    ✓ Select (${resolved.source}): "${label}" → "${resolved.value}"`);
+        continue;
       }
       console.log(`    ○ Select empty: "${label}" [${options.join(', ')}]`);
     }
@@ -302,12 +295,20 @@ export class AshbyFormFillerService {
         .catch(() => '');
       if (!label) continue;
 
-      // Get answer
-      let answer = getPreScrapedAnswer(id, label);
-      if (!answer) answer = this.directAnswer.getDirectAnswer(id, label, profile, 'select');
-      if (!answer) continue;
+      // The menu's options aren't in the DOM until it opens, so none are passed
+      // here; the answer is typed to filter and matched against the menu below.
+      const resolved = await this.fieldAnswers.resolve({
+        fieldId: id,
+        label,
+        type: 'select',
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+      });
+      if (!resolved) continue;
+      const answer = resolved.value;
 
-      console.log(`    Combobox "${label}": answer="${answer}"`);
+      console.log(`    Combobox "${label}" (${resolved.source}): answer="${answer}"`);
 
       // Type answer to filter, then click match
       await combo.click({ timeout: 3000 }).catch(() => {});
@@ -400,9 +401,17 @@ export class AshbyFormFillerService {
           .catch(() => false);
         if (already) continue;
 
-        let answer = getPreScrapedAnswer('', label);
-        if (!answer) answer = this.directAnswer.getDirectAnswer('', label, profile, 'select');
-        if (!answer) continue;
+        // No options passed: the buttons are always Yes/No, and the first-letter
+        // mapping below already handles free-form answers like "No, I do not".
+        const resolved = await this.fieldAnswers.resolve({
+          label,
+          type: 'select',
+          profile,
+          getPreScrapedAnswer,
+          cache: answerCache,
+        });
+        if (!resolved) continue;
+        const answer = resolved.value;
 
         const want = answer.toLowerCase().startsWith('y')
           ? 'Yes'
@@ -450,8 +459,15 @@ export class AshbyFormFillerService {
           .catch(() => '');
         if (!label) continue;
 
-        const answer = this.directAnswer.getDirectAnswer('', label, profile, 'select');
-        if (!answer) continue;
+        const resolved = await this.fieldAnswers.resolve({
+          label,
+          type: 'select',
+          profile,
+          getPreScrapedAnswer,
+          cache: answerCache,
+        });
+        if (!resolved) continue;
+        const answer = resolved.value;
 
         // Click matching checkbox option
         for (const cb of checkboxes) {
@@ -631,33 +647,15 @@ export class AshbyFormFillerService {
 
         console.log(`    Radio "${groupLabel}": ${optionTexts.join(' | ')}`);
 
-        // Same resolution order as the Greenhouse filler: pre-scraped answer from
-        // the Prepare tab, then saved rules, then the hardcoded profile answer.
-        let answer = '';
-        const preAnswer = getPreScrapedAnswer('', groupLabel);
-        if (preAnswer && !isRefusalText(preAnswer)) {
-          answer = this.optionMatcher.smartMatchOption(preAnswer, optionTexts, groupLabel) || '';
-        }
-        if (!answer) {
-          try {
-            const ruleAnswer = await this.questionAnswerer.answerQuestion(
-              groupLabel,
-              'radio',
-              optionTexts,
-            );
-            if (ruleAnswer && !isRefusalText(ruleAnswer)) {
-              answer = this.optionMatcher.smartMatchOption(ruleAnswer, optionTexts, groupLabel) || '';
-            }
-          } catch {
-            /* fall through to the profile answer */
-          }
-        }
-        if (!answer) {
-          const direct = this.directAnswer.getDirectAnswer('', groupLabel, profile, 'radio');
-          if (direct) {
-            answer = this.optionMatcher.smartMatchOption(direct, optionTexts, groupLabel) || '';
-          }
-        }
+        const resolved = await this.fieldAnswers.resolve({
+          label: groupLabel,
+          type: 'radio',
+          options: optionTexts,
+          profile,
+          getPreScrapedAnswer,
+          cache: answerCache,
+        });
+        let answer = resolved?.value ?? '';
 
         // Last resort for work-location questions, which are phrased too many ways
         // for the rules to cover and always want the remote/hybrid option.
@@ -689,7 +687,9 @@ export class AshbyFormFillerService {
           continue;
         }
         await target.radio.click({ force: true });
-        console.log(`    ✓ Radio: "${groupLabel}" → "${target.text}"`);
+        console.log(
+          `    ✓ Radio (${resolved?.source ?? 'location-fallback'}): "${groupLabel}" → "${target.text}"`,
+        );
       }
     }
   } catch (err) {
@@ -713,12 +713,17 @@ export class AshbyFormFillerService {
         })
         .catch(() => '');
       if (!label) continue;
-      // Try pre-scraped or rules
-      const preAnswer = getPreScrapedAnswer('', label);
-      if (preAnswer) {
+      const resolved = await this.fieldAnswers.resolve({
+        label,
+        type: 'textarea',
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+      });
+      if (resolved) {
         await ta.click({ force: true }).catch(() => {});
-        await ta.fill(preAnswer);
-        console.log(`    ✓ Textarea: "${label}"`);
+        await ta.fill(resolved.value);
+        console.log(`    ✓ Textarea (${resolved.source}): "${label}"`);
       }
     }
   } catch (err) {

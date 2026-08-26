@@ -320,8 +320,10 @@ export class DirectAnswerService {
       return 'Cisgender';
     }
 
-    // ── Generic yes/no — only for dropdowns, not text inputs ──
-    if (fieldType === 'text') return null;
+    // ── Generic yes/no — only for dropdowns, not free-text fields ──
+    // A textarea is a free-text field too: "are you open to relocating?" asked as
+    // prose must not be answered with a bare "Yes".
+    if (fieldType === 'text' || fieldType === 'textarea') return null;
 
     const yesPatterns = [
       'are you open to',

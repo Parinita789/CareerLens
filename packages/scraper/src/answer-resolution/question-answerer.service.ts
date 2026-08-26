@@ -166,27 +166,52 @@ export class QuestionAnswererService {
     await logQuestionAnswer(this.currentJob.id, this.currentJob.title, this.currentJob.company, entry);
   }
 
+  /**
+   * Saved-rule lookup only — free, deterministic, and never calls a model. Returns
+   * null when no rule matches so a caller can fall through to a cheaper or more
+   * authoritative source without paying for a model call. `answerQuestion` is this
+   * followed by `answerWithLlm`; split apart so the field resolver can consult saved
+   * rules on every field while keeping LLM use to the call sites that already had it.
+   */
+  async matchSavedRule(
+    question: string,
+    type: 'text' | 'textarea' | 'select' | 'radio',
+    options?: string[],
+  ): Promise<string | null> {
+    // A keyword rule can't stand in for open prose.
+    if (type === 'textarea') return null;
+    const structured = await this.matchStructured(question);
+    if (!structured) return null;
+    let mapped = structured;
+    if ((type === 'select' || type === 'radio') && options?.length) {
+      const match = this.optionMatcher.smartMatchOption(structured, options, question);
+      if (match) mapped = match;
+    }
+    console.log(
+      `    Rule-based: "${question}" → "${mapped}"${mapped !== structured ? ` (mapped from "${structured}")` : ''}`,
+    );
+    await this.logQA({ question, type, options, answer: mapped, source: 'rule' });
+    return mapped;
+  }
+
+  /** Saved rules first, then the model. Unchanged behaviour for existing callers. */
   async answerQuestion(
     question: string,
     type: 'text' | 'textarea' | 'select' | 'radio',
     options?: string[],
   ): Promise<string> {
-    const profile = await this.getProfile();
+    const rule = await this.matchSavedRule(question, type, options);
+    if (rule !== null) return rule;
+    return this.answerWithLlm(question, type, options);
+  }
 
-    // try rule-based first — fast and free
-    const structured = await this.matchStructured(question);
-    if (structured && type !== 'textarea') {
-      let mapped = structured;
-      if ((type === 'select' || type === 'radio') && options?.length) {
-        const match = this.optionMatcher.smartMatchOption(structured, options, question);
-        if (match) mapped = match;
-      }
-      console.log(
-        `    Rule-based: "${question}" → "${mapped}"${mapped !== structured ? ` (mapped from "${structured}")` : ''}`,
-      );
-      await this.logQA({ question, type, options, answer: mapped, source: 'rule' });
-      return mapped;
-    }
+  /** The model half of `answerQuestion`, without re-running the rule lookup. */
+  async answerWithLlm(
+    question: string,
+    type: 'text' | 'textarea' | 'select' | 'radio',
+    options?: string[],
+  ): Promise<string> {
+    const profile = await this.getProfile();
 
     // for select/radio — pick best option
     if ((type === 'select' || type === 'radio') && options?.length) {

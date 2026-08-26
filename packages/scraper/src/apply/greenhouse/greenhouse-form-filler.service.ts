@@ -4,9 +4,9 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { ScoredJob } from '../../types';
 import { OptionMatcherService } from '../../answer-resolution/option-matcher.service';
+import { FieldAnswerResolverService } from '../../answer-resolution/field-answer-resolver.service';
 import { isRefusalText } from '../../answer-resolution/refusal';
 import { DirectAnswerService } from '../../answer-resolution/direct-answer.service';
-import { QuestionAnswererService } from '../../answer-resolution/question-answerer.service';
 import { logQuestionAnswer } from '../../persistence/db';
 import { GreenhouseFieldInspectorService } from './greenhouse-field-inspector.service';
 import { AshbyFormFillerService } from './ashby-form-filler.service';
@@ -18,8 +18,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class GreenhouseFormFillerService {
   constructor(
     @Inject(OptionMatcherService) private readonly optionMatcher: OptionMatcherService,
+    @Inject(FieldAnswerResolverService) private readonly fieldAnswers: FieldAnswerResolverService,
     @Inject(DirectAnswerService) private readonly directAnswer: DirectAnswerService,
-    @Inject(QuestionAnswererService) private readonly questionAnswerer: QuestionAnswererService,
     @Inject(GreenhouseFieldInspectorService) private readonly fieldInspector: GreenhouseFieldInspectorService,
     @Inject(AshbyFormFillerService) private readonly ashbyFormFiller: AshbyFormFillerService,
   ) {}
@@ -34,6 +34,7 @@ export class GreenhouseFormFillerService {
   const preScraped = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
     .lean()
     .catch(() => null)) as any;
+  const answerCache = this.fieldAnswers.newCache();
   const preAnswersByFieldId = new Map<string, { value: string; source: string }>();
   const preAnswersByLabel = new Map<string, { value: string; source: string }>();
   let skippedRefusals = 0;
@@ -191,24 +192,16 @@ export class GreenhouseFormFillerService {
           continue;
         }
 
-        // Resolve answer: pre-scraped → rules → profile (NO LLM)
-        let answer = '';
-        const preAnswer = getPreScrapedAnswer(id, label);
-        if (preAnswer) {
-          answer = preAnswer;
-        }
-        if (!answer) {
-          try {
-            const ruleAnswer = await this.questionAnswerer.answerQuestion(label, 'select');
-            if (ruleAnswer && !isRefusalText(ruleAnswer)) answer = ruleAnswer;
-          } catch {
-            /* fall through */
-          }
-        }
-        if (!answer) {
-          const directAnswer = this.directAnswer.getDirectAnswer(id, label, profile, 'select');
-          if (directAnswer) answer = directAnswer;
-        }
+        // No options to choose from here, so the model is not consulted.
+        const resolved = await this.fieldAnswers.resolve({
+          fieldId: id,
+          label,
+          type: 'select',
+          profile,
+          getPreScrapedAnswer,
+          cache: answerCache,
+        });
+        const answer = resolved?.value ?? '';
 
         if (!answer) {
           console.log(`    ○ Skipped dropdown: "${label}" — no answer available`);
@@ -748,41 +741,21 @@ export class GreenhouseFormFillerService {
 
       console.log(`    Field: id="${id}" label="${label}" type="text"`);
 
-      // Try pre-scraped answer first (already reviewed — fill instantly)
-      const preAnswer = getPreScrapedAnswer(id, label);
-      if (preAnswer !== null) {
-        await input.fill(preAnswer);
+      const resolved = await this.fieldAnswers.resolve({
+        fieldId: id,
+        label,
+        type: 'text',
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+        allowLlm: true,
+        // A one-line input must not receive a paragraph.
+        maxLength: 199,
+      });
+      if (resolved) {
+        await input.fill(resolved.value);
         await sleep(100);
-        console.log(`    ✓ Filled (pre-scraped): "${label}" = "${preAnswer}"`);
-        filledIds.add(id);
-        continue;
-      }
-
-      // Try saved rules first (user corrections override hardcoded defaults)
-      try {
-        const ruleAnswer = await this.questionAnswerer.answerQuestion(label, 'text');
-        if (
-          ruleAnswer &&
-          ruleAnswer.length > 0 &&
-          ruleAnswer.length < 200 &&
-          !isRefusalText(ruleAnswer)
-        ) {
-          await input.fill(ruleAnswer);
-          await sleep(100);
-          console.log(`    ✓ Filled (rule): "${label}" = "${ruleAnswer}"`);
-          filledIds.add(id);
-          continue;
-        }
-      } catch {
-        /* fall through */
-      }
-
-      // Try hardcoded profile mapping as fallback
-      const directAnswer = this.directAnswer.getDirectAnswer(id, label, profile);
-      if (directAnswer !== null) {
-        await input.fill(directAnswer);
-        await sleep(100);
-        console.log(`    ✓ Filled (profile): "${label}" = "${directAnswer}"`);
+        console.log(`    ✓ Filled (${resolved.source}): "${label}" = "${resolved.value}"`);
         filledIds.add(id);
         continue;
       }
@@ -816,12 +789,19 @@ export class GreenhouseFormFillerService {
       const existing = await textarea.inputValue().catch(() => '');
       if (existing) continue;
 
-      // Try pre-scraped answer first
-      const preAnswer = getPreScrapedAnswer('', label);
-      if (preAnswer) {
-        await textarea.fill(preAnswer);
+      // First pass without the model: a reviewed answer, if one exists, wins over
+      // the cover-letter branch below.
+      const reviewed = await this.fieldAnswers.resolve({
+        label,
+        type: 'textarea',
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+      });
+      if (reviewed) {
+        await textarea.fill(reviewed.value);
         await sleep(200);
-        console.log(`    ✓ Filled textarea (pre-scraped): "${label}"`);
+        console.log(`    ✓ Filled textarea (${reviewed.source}): "${label}"`);
         continue;
       }
 
@@ -863,25 +843,22 @@ export class GreenhouseFormFillerService {
         }
       }
 
-      // Try rule-based, skip if unknown — user fills manually
-      let answer = '';
-      try {
-        const ruleAnswer = await this.questionAnswerer.answerQuestion(label, 'textarea');
-        if (ruleAnswer && ruleAnswer.length > 0 && !isRefusalText(ruleAnswer)) answer = ruleAnswer;
-      } catch {
-        /* skip */
-      }
-
-      if (!answer) {
+      // Second pass, model permitted — this is the open-prose fallback.
+      const generated = await this.fieldAnswers.resolve({
+        label,
+        type: 'textarea',
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+        allowLlm: true,
+      });
+      if (!generated) {
         console.log(`    ○ Skipped textarea: "${label}" — fill manually`);
         continue;
       }
-
-      if (answer) {
-        await textarea.fill(answer);
-        await sleep(200);
-        console.log(`    Filled textarea: "${label}"`);
-      }
+      await textarea.fill(generated.value);
+      await sleep(200);
+      console.log(`    Filled textarea (${generated.source}): "${label}"`);
     }
   } catch (err) {
     console.log(`  ⚠ Textarea handler error (continuing): ${(err as Error).message}`);
@@ -908,31 +885,16 @@ export class GreenhouseFormFillerService {
       );
       if (!options.length) continue;
 
-      // Resolve answer: pre-scraped → rules → profile (NO LLM), all via smartMatchOption
-      let bestOption = '';
-      const preAnswer = getPreScrapedAnswer('', label);
-      if (preAnswer) {
-        const matched = this.optionMatcher.smartMatchOption(preAnswer, options, label);
-        if (matched) bestOption = matched;
-      }
-      if (!bestOption) {
-        try {
-          const ruleAnswer = await this.questionAnswerer.answerQuestion(label, 'select', options);
-          if (ruleAnswer && !isRefusalText(ruleAnswer)) {
-            const matched = this.optionMatcher.smartMatchOption(ruleAnswer, options, label);
-            if (matched) bestOption = matched;
-          }
-        } catch {
-          /* skip */
-        }
-      }
-      if (!bestOption) {
-        const directAnswer = this.directAnswer.getDirectAnswer('', label, profile, 'select');
-        if (directAnswer) {
-          const matched = this.optionMatcher.smartMatchOption(directAnswer, options, label);
-          if (matched) bestOption = matched;
-        }
-      }
+      const resolvedSelect = await this.fieldAnswers.resolve({
+        label,
+        type: 'select',
+        options,
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+        allowLlm: true,
+      });
+      const bestOption = resolvedSelect?.value ?? '';
       if (!bestOption) {
         console.log(`    ○ Skipped select: "${label}" — fill manually`);
         continue;
@@ -971,38 +933,17 @@ export class GreenhouseFormFillerService {
       const checked = await fieldset.$('input[type="radio"]:checked');
       if (checked) continue;
 
-      // Try pre-scraped answer first — smart deterministic matching
-      let answer = '';
-      const preAnswer = getPreScrapedAnswer('', legend);
-      if (preAnswer) {
-        const matched = this.optionMatcher.smartMatchOption(preAnswer, radioLabels, legend);
-        if (matched) {
-          answer = matched;
-          console.log(`    ✓ Pre-scraped match: "${legend}" → "${matched}"`);
-        }
-      }
-
-      // Try saved rules first (user corrections override hardcoded defaults)
-      if (!answer) {
-        try {
-          const ruleAnswer = await this.questionAnswerer.answerQuestion(legend, 'radio', radioLabels);
-          if (ruleAnswer && !isRefusalText(ruleAnswer)) {
-            const matched = this.optionMatcher.smartMatchOption(ruleAnswer, radioLabels, legend);
-            if (matched) answer = matched;
-          }
-        } catch {
-          /* skip */
-        }
-      }
-
-      // Try hardcoded profile answer as fallback
-      if (!answer) {
-        const directAnswer = this.directAnswer.getDirectAnswer('', legend, profile, 'radio');
-        if (directAnswer) {
-          const matched = this.optionMatcher.smartMatchOption(directAnswer, radioLabels, legend);
-          if (matched) answer = matched;
-        }
-      }
+      const resolvedRadio = await this.fieldAnswers.resolve({
+        label: legend,
+        type: 'radio',
+        options: radioLabels,
+        profile,
+        getPreScrapedAnswer,
+        cache: answerCache,
+        allowLlm: true,
+      });
+      const answer = resolvedRadio?.value ?? '';
+      if (answer) console.log(`    ${legend} → "${answer}" (${resolvedRadio!.source})`);
       if (!answer) {
         console.log(`    ○ Skipped radio: "${legend}" — fill manually`);
         continue;
