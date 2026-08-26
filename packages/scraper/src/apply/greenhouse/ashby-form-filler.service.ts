@@ -587,16 +587,12 @@ export class AshbyFormFillerService {
             for (let i = 0; i < 10 && node; i++) {
               node = node.parentElement;
               if (!node) break;
-              candidates.push(node.querySelector('legend'));
+              // ':scope >' matters: a bare querySelector('legend') searches all
+              // descendants, so once the walk reaches <form> it happily returns some
+              // *other* fieldset's legend as this group's question.
+              candidates.push(node.querySelector(':scope > legend'));
               for (const label of Array.from(node.querySelectorAll(':scope > label'))) {
                 if (!label.querySelector('input')) candidates.push(label);
-              }
-              // Ashby puts the real question ("Gender", "Race") in a <label> that is
-              // a sibling *before* the group's wrapper, not inside it.
-              let sib = node.previousElementSibling;
-              for (let j = 0; j < 3 && sib; j++) {
-                candidates.push(sib.matches('label, legend') ? sib : sib.querySelector('label, legend'));
-                sib = sib.previousElementSibling;
               }
             }
 
@@ -605,8 +601,19 @@ export class AshbyFormFillerService {
               if (!t || t.length >= 200) continue;
               const n = t.toLowerCase();
               if (normalized.includes(n)) continue; // it's an option label, not the question
-              // A wrapper's text is every option concatenated — also not the question.
-              if (normalized.filter((o) => n.includes(o)).length >= 2) continue;
+              // A wrapper's text is every option concatenated, which is also not the
+              // question. Distinguish that from a real question that merely mentions
+              // its options ("Do you prefer remote or hybrid work?") by what survives
+              // removing every option: for a wrapper, almost nothing does.
+              if (normalized.filter((o) => n.includes(o)).length >= 2) {
+                let residue = n;
+                for (const o of normalized.slice().sort((a, b) => b.length - a.length)) {
+                  residue = residue.split(o).join(' ');
+                }
+                const before = n.replace(/[^a-z0-9]/g, '').length;
+                const after = residue.replace(/[^a-z0-9]/g, '').length;
+                if (before > 0 && after / before < 0.3) continue;
+              }
               return t;
             }
             return '';
