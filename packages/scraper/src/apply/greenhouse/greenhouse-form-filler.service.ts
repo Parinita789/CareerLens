@@ -4,6 +4,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { ScoredJob } from '../../types';
 import { OptionMatcherService } from '../../answer-resolution/option-matcher.service';
+import { isRefusalText } from '../../answer-resolution/refusal';
 import { DirectAnswerService } from '../../answer-resolution/direct-answer.service';
 import { QuestionAnswererService } from '../../answer-resolution/question-answerer.service';
 import { logQuestionAnswer } from '../../persistence/db';
@@ -33,31 +34,6 @@ export class GreenhouseFormFillerService {
   const preScraped = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
     .lean()
     .catch(() => null)) as any;
-  // Filter out LLM refusal paragraphs stored in legacy pre-scraped data
-  function isRefusalText(v: string): boolean {
-    if (!v) return true;
-    const t = v.trim().toLowerCase();
-    if (t.length > 400) return true;
-    const markers = [
-      "i can't answer",
-      'i cannot answer',
-      "i don't wish to",
-      'the candidate should',
-      'candidate needs to',
-      'candidate themselves',
-      'i decline to',
-      "i shouldn't guess",
-      "i'm not able to",
-      'i am not able to',
-      'only the candidate',
-      'inferred from',
-      'not included in',
-      'sensitive personal',
-      'this is personal',
-    ];
-    return markers.some((m) => t.includes(m));
-  }
-
   const preAnswersByFieldId = new Map<string, { value: string; source: string }>();
   const preAnswersByLabel = new Map<string, { value: string; source: string }>();
   let skippedRefusals = 0;

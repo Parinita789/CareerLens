@@ -5,15 +5,43 @@ import { fileURLToPath } from 'url';
 import type { ScoredJob } from '../../types';
 import { OptionMatcherService } from '../../answer-resolution/option-matcher.service';
 import { DirectAnswerService } from '../../answer-resolution/direct-answer.service';
+import { QuestionAnswererService } from '../../answer-resolution/question-answerer.service';
+import { isRefusalText } from '../../answer-resolution/refusal';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Runs in the page. Reads one radio's visible option text, trying the markup shapes
+// Ashby actually emits in order of reliability.
+function readAshbyOptionText(el: Element): string {
+  // Standard markup first: a <label for> pointing at the radio, or a <label> wrapping
+  // it. Checking Ashby's span trick before these reads the *next* option's text
+  // whenever the radio is a direct child of its own label.
+  const byFor = el.id ? document.querySelector('label[for="' + CSS.escape(el.id) + '"]') : null;
+  if (byFor?.textContent?.trim()) return byFor.textContent.trim();
+  const ownLabel = el.closest('label');
+  if (ownLabel?.textContent?.trim()) return ownLabel.textContent.trim();
+  // Ashby's own markup: the radio is wrapped in a bare <span> and the visible option
+  // text is that span's next sibling.
+  const parentSpan = el.parentElement;
+  const nextSibling = parentSpan?.nextElementSibling;
+  if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
+  // Only fall back to the wrapper's text when it wraps this radio alone. Otherwise
+  // it returns every option in the group concatenated into one string, which then
+  // gets fed to the option matcher as if it were a single choice.
+  const optionDiv = parentSpan?.parentElement;
+  if (optionDiv && optionDiv.querySelectorAll('input[type="radio"]').length === 1) {
+    return optionDiv.textContent?.trim() || '';
+  }
+  return '';
+}
 
 @Injectable()
 export class AshbyFormFillerService {
   constructor(
     @Inject(OptionMatcherService) private readonly optionMatcher: OptionMatcherService,
     @Inject(DirectAnswerService) private readonly directAnswer: DirectAnswerService,
+    @Inject(QuestionAnswererService) private readonly questionAnswerer: QuestionAnswererService,
   ) {}
 
   async fillAshbyForm(
@@ -528,102 +556,133 @@ export class AshbyFormFillerService {
         const checked = await page.$(`input[type="radio"][name="${name}"]:checked`);
         if (checked) continue;
 
-        const firstRadio = await page.$(`input[type="radio"][name="${name}"]`);
-        if (!firstRadio) continue;
-        const groupLabel = await firstRadio
-          .evaluate((el) => {
-            // Walk up to find fieldset or field wrapper, get the question label (not option label)
+        // Read the options BEFORE deriving the question. Ashby renders each radio
+        // group in a <fieldset> with an *empty* <legend>, so walking up for a label
+        // lands on the first option ("Male", "Hispanic or Latino") and the group
+        // gets answered as though that were the question. Knowing the option texts
+        // up front lets the walk reject any candidate that is really an option.
+        const radios = await page.$$(`input[type="radio"][name="${name}"]`);
+        const options: { radio: (typeof radios)[number]; text: string }[] = [];
+        for (const radio of radios) {
+          const text = await radio.evaluate(readAshbyOptionText).catch(() => '');
+          if (text) options.push({ radio, text });
+        }
+        if (!options.length) continue;
+        const optionTexts = options.map((o) => o.text);
+
+        const groupLabel = await options[0].radio
+          .evaluate((el, opts: string[]) => {
+            // No named helper functions inside this callback: esbuild's keepNames
+            // rewrites both function declarations and named arrows into a __name()
+            // call that does not exist in the page, which throws ReferenceError.
+            // Only anonymous inline arrows survive the trip.
+            const normalized = opts
+              .map((o) => (o || '').replace(/\s+/g, ' ').trim().toLowerCase())
+              .filter(Boolean);
+
+            // Collect label candidates innermost-first, then pick the first that
+            // isn't itself an option.
+            const candidates: (Element | null)[] = [];
             let node: Element | null = el;
             for (let i = 0; i < 10 && node; i++) {
               node = node.parentElement;
               if (!node) break;
-              // Check for fieldset legend
-              const legend = node.querySelector('legend');
-              if (legend) return legend.textContent?.trim() || '';
-              // Check for a label that is a DIRECT child (not nested inside options)
-              const labels = node.querySelectorAll(':scope > label');
-              for (const label of Array.from(labels)) {
-                if (!label.querySelector('input')) return label.textContent?.trim() || '';
+              candidates.push(node.querySelector('legend'));
+              for (const label of Array.from(node.querySelectorAll(':scope > label'))) {
+                if (!label.querySelector('input')) candidates.push(label);
+              }
+              // Ashby puts the real question ("Gender", "Race") in a <label> that is
+              // a sibling *before* the group's wrapper, not inside it.
+              let sib = node.previousElementSibling;
+              for (let j = 0; j < 3 && sib; j++) {
+                candidates.push(sib.matches('label, legend') ? sib : sib.querySelector('label, legend'));
+                sib = sib.previousElementSibling;
               }
             }
-            return '';
-          })
-          .catch(() => '');
-        if (!groupLabel) continue;
 
-        // Get option texts
-        const allRadios = await page.$$(`input[type="radio"][name="${name}"]`);
-        const optionTexts: string[] = [];
-        for (const radio of allRadios) {
-          const text = await radio
-            .evaluate((el) => {
-              // Ashby: option text is in nextSibling of parent span, or in parent's parent div
-              const parentSpan = el.parentElement;
-              const nextSibling = parentSpan?.nextElementSibling;
-              if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
-              // Try parent div (contains full option text)
-              const optionDiv = parentSpan?.parentElement;
-              if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
-              // Fallback: label or parent
-              const label = el.closest('label');
-              return (label?.textContent || '').trim();
-            })
-            .catch(() => '');
-          if (text) optionTexts.push(text);
+            for (const candidate of candidates) {
+              const t = candidate?.textContent?.replace(/\s+/g, ' ').trim() || '';
+              if (!t || t.length >= 200) continue;
+              const n = t.toLowerCase();
+              if (normalized.includes(n)) continue; // it's an option label, not the question
+              // A wrapper's text is every option concatenated — also not the question.
+              if (normalized.filter((o) => n.includes(o)).length >= 2) continue;
+              return t;
+            }
+            return '';
+          }, optionTexts)
+          .catch((e: Error) => {
+            // A silently-swallowed failure here is indistinguishable from "no label
+            // found", which is how the demographic groups went unfilled unnoticed.
+            console.log(`    ○ Radio label walk failed: ${e.message.slice(0, 100)}`);
+            return '';
+          });
+        if (!groupLabel) {
+          console.log(`    ○ Skipped radios (no question text): ${optionTexts.slice(0, 3).join(' | ')}`);
+          continue;
         }
 
         console.log(`    Radio "${groupLabel}": ${optionTexts.join(' | ')}`);
 
-        // Pick best option
-        const gl = groupLabel.toLowerCase();
-        const hasLocationOptions = optionTexts.some(
-          (o) =>
-            o.toLowerCase().includes('remote') ||
-            o.toLowerCase().includes('hybrid') ||
-            o.toLowerCase().includes('nyc') ||
-            o.toLowerCase().includes('office') ||
-            o.toLowerCase().includes('relocat'),
-        );
+        // Same resolution order as the Greenhouse filler: pre-scraped answer from
+        // the Prepare tab, then saved rules, then the hardcoded profile answer.
         let answer = '';
-        if (
-          gl.includes('work') ||
-          gl.includes('location') ||
-          gl.includes('remote') ||
-          gl.includes('office') ||
-          gl.includes('where') ||
-          hasLocationOptions
-        ) {
-          answer =
-            optionTexts.find((o) => o.toLowerCase().includes('remote')) ||
-            optionTexts.find((o) => o.toLowerCase().includes('hybrid')) ||
-            optionTexts.find((o) => o.toLowerCase().includes('relocat')) ||
-            optionTexts[0] ||
-            '';
+        const preAnswer = getPreScrapedAnswer('', groupLabel);
+        if (preAnswer && !isRefusalText(preAnswer)) {
+          answer = this.optionMatcher.smartMatchOption(preAnswer, optionTexts, groupLabel) || '';
         }
-
-        if (answer) {
-          for (const radio of allRadios) {
-            const radioText = await radio
-              .evaluate((el) => {
-                const parentSpan = el.parentElement;
-                const nextSibling = parentSpan?.nextElementSibling;
-                if (nextSibling?.textContent?.trim()) return nextSibling.textContent.trim();
-                const optionDiv = parentSpan?.parentElement;
-                if (optionDiv?.textContent?.trim()) return optionDiv.textContent.trim();
-                const label = el.closest('label');
-                return (label?.textContent || '').trim();
-              })
-              .catch(() => '');
-            if (
-              radioText.toLowerCase().includes(answer.toLowerCase()) ||
-              answer.toLowerCase().includes(radioText.toLowerCase())
-            ) {
-              await radio.click({ force: true });
-              console.log(`    ✓ Radio: "${groupLabel}" → "${radioText}"`);
-              break;
+        if (!answer) {
+          try {
+            const ruleAnswer = await this.questionAnswerer.answerQuestion(
+              groupLabel,
+              'radio',
+              optionTexts,
+            );
+            if (ruleAnswer && !isRefusalText(ruleAnswer)) {
+              answer = this.optionMatcher.smartMatchOption(ruleAnswer, optionTexts, groupLabel) || '';
             }
+          } catch {
+            /* fall through to the profile answer */
           }
         }
+        if (!answer) {
+          const direct = this.directAnswer.getDirectAnswer('', groupLabel, profile, 'radio');
+          if (direct) {
+            answer = this.optionMatcher.smartMatchOption(direct, optionTexts, groupLabel) || '';
+          }
+        }
+
+        // Last resort for work-location questions, which are phrased too many ways
+        // for the rules to cover and always want the remote/hybrid option.
+        if (!answer) {
+          const gl = groupLabel.toLowerCase();
+          const hasLocationOptions = optionTexts.some((o) => /remote|hybrid|nyc|office|relocat/i.test(o));
+          if (/work|location|remote|office|where/.test(gl) || hasLocationOptions) {
+            answer =
+              optionTexts.find((o) => /remote/i.test(o)) ||
+              optionTexts.find((o) => /hybrid/i.test(o)) ||
+              optionTexts.find((o) => /relocat/i.test(o)) ||
+              optionTexts[0];
+          }
+        }
+
+        if (!answer) {
+          console.log(`    ○ Skipped radio: "${groupLabel}" — fill manually`);
+          continue;
+        }
+
+        // Exact option text first. Two-way substring matching alone picks the wrong
+        // radio whenever options overlap — "female".includes("male") is true.
+        const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+        const target =
+          options.find((o) => norm(o.text) === norm(answer)) ||
+          options.find((o) => norm(o.text).includes(norm(answer)) || norm(answer).includes(norm(o.text)));
+        if (!target) {
+          console.log(`    ○ Radio "${groupLabel}": no option matched "${answer}"`);
+          continue;
+        }
+        await target.radio.click({ force: true });
+        console.log(`    ✓ Radio: "${groupLabel}" → "${target.text}"`);
       }
     }
   } catch (err) {
