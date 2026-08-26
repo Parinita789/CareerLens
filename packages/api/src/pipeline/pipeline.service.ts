@@ -1,7 +1,7 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
-import { UserModel } from '@job-agent/shared';
+import { UserModel, Limiter } from '@job-agent/shared';
 
 // Read the global "allow bot to submit" toggle from UserModel.settings. Falls
 // back to false (dry-run) on any error — safe default. Read fresh on every
@@ -80,6 +80,11 @@ const COMMANDS: Record<
 // so a phase legitimately runs for a long time.
 const PHASE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
+// Each concurrent auto-apply opens its own maximised, non-headless Chromium and
+// holds it for up to 30 minutes awaiting review. Two is enough to keep working
+// while one waits on you, without burying the screen or the machine.
+const MAX_CONCURRENT_AUTO_APPLY = 2;
+
 @Injectable()
 export class PipelineService {
   // Every live child. runSelectedPhases deliberately lets an auto-apply run
@@ -88,6 +93,8 @@ export class PipelineService {
   // the scrape, and whichever child exited first would clear the handle for the
   // one still running, leaving Stop with nothing to kill.
   private activeChildren = new Set<ChildProcess>();
+  // Bounds how many auto-apply browsers can be open at once.
+  private readonly autoApplyLimiter = new Limiter(MAX_CONCURRENT_AUTO_APPLY);
   private cancelled = false;
 
   private state: PipelineState = {
@@ -154,14 +161,18 @@ export class PipelineService {
     applyLimit?: number,
     applyJobIds?: string[],
   ): Promise<void> {
-    // Global setting drives --submit for every apply spawn below.
-    const allowAutoSubmit = await readAllowAutoSubmit();
+    // The `running` check must be reached without an intervening await. Reading
+    // the auto-submit setting first yielded the event loop, so a burst of
+    // simultaneous requests could all observe running === false, all take the
+    // sequential path below, and each overwrite this.state — resetting the log
+    // buffer and command label. The DB read now happens after a path is chosen.
     if (this.state.running) {
       // Allow auto-apply to run concurrently with scraping
       const isAutoApply = phaseIds.length === 1 && phaseIds[0] === 'apply';
       if (!isAutoApply) {
         throw new ConflictException('A command is already running');
       }
+      const allowAutoSubmit = await readAllowAutoSubmit();
       // Spawn independently without blocking the running pipeline
       console.log('[Pipeline] Running Auto Apply concurrently with:', this.state.command);
       const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
@@ -172,8 +183,18 @@ export class PipelineService {
       if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
       args.push(`--submit=${allowAutoSubmit}`);
       const scraperDir = SCRAPER_DIR_RESOLVER();
-      this.addLog('--- Auto Apply started (concurrent) ---');
-      this.spawnWithLogs(phase.cmd, args, scraperDir)
+      const queued = this.autoApplyLimiter.inFlight >= MAX_CONCURRENT_AUTO_APPLY;
+      this.addLog(
+        queued
+          ? `--- Auto Apply queued (${MAX_CONCURRENT_AUTO_APPLY} already running) ---`
+          : '--- Auto Apply started (concurrent) ---',
+      );
+      // Through the limiter: each spawn drives its own visible Chromium that
+      // stays open for review, so N clicks used to mean N browsers. Ten clicks
+      // measured at ~80 Chrome processes and ~3 GB. Extra requests now wait for
+      // a slot rather than piling on.
+      this.autoApplyLimiter
+        .run(() => this.spawnWithLogs(phase.cmd, args, scraperDir))
         .then(() => {
           this.addLog('--- Auto Apply completed ---');
         })
@@ -182,6 +203,35 @@ export class PipelineService {
         });
       return;
     }
+
+    // Claim the slot synchronously, before any await. The guard above is only
+    // meaningful if nothing can pass it twice, and `running` was previously not
+    // set until after the DB read below — so two simultaneous requests could
+    // both see false, both proceed, and each overwrite this.state.
+    this.state.running = true;
+    try {
+      return await this.startSequential(
+        phaseIds,
+        scrapeSources,
+        applyPlatforms,
+        applyLimit,
+        applyJobIds,
+      );
+    } catch (err) {
+      // Release the claim, or a rejected request wedges the pipeline forever.
+      this.state.running = false;
+      throw err;
+    }
+  }
+
+  private async startSequential(
+    phaseIds: string[],
+    scrapeSources?: string[],
+    applyPlatforms?: string[],
+    applyLimit?: number,
+    applyJobIds?: string[],
+  ): Promise<void> {
+    const allowAutoSubmit = await readAllowAutoSubmit();
 
     const phases = phaseIds
       .map((id) => {

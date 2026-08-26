@@ -6,7 +6,7 @@ import { format } from 'node:util';
 import { NestFactory } from '@nestjs/core';
 import { connectToDatabase, disconnectDatabase } from './persistence/db';
 import { TARGET_COMPANIES } from './common/company-directory';
-import { Limiter } from './common/limiter';
+import { Limiter } from '@job-agent/shared';
 import { roleKey } from './common/role-key';
 import { AppModule } from './app.module';
 import { DealBreakerService } from './scoring/deal-breakers.service';

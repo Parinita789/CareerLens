@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Limiter } from '../common/limiter';
+import { Limiter } from '@job-agent/shared';
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
