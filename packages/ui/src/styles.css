@@ -599,6 +599,8 @@ h1 {
 }
 
 /* Apply link */
+/* Was an <a> opening the posting; now a <button> that launches the apply bot.
+   The resets below replace the UA button defaults an <a> never had. */
 .apply-link {
   display: inline-flex;
   align-items: center;
@@ -610,6 +612,15 @@ h1 {
   padding: 4px 12px;
   border-radius: 6px;
   transition: all 0.15s ease;
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.apply-link:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .apply-link:hover {

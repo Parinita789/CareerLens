@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ScoredJob } from '../types';
 import { INTERVIEW_ROUNDS, ACCEPTED_OUTCOMES, roleKey } from './app';
 
@@ -68,6 +68,21 @@ function scoreClass(score: number): string {
 
 export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect, trackedStatusByRole }: JobTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Rows whose bot run has been kicked off. Cleared when the job leaves the
+  // Queue (status flips to applied), which is the real completion signal.
+  const [applying, setApplying] = useState<Set<string>>(new Set());
+
+  // A launched job stays "Applying…" until it leaves the Queue — the bot holds the
+  // browser open for review, so the run really is still in flight. app.tsx repolls
+  // every 5s, so the row vanishes once the status flips and this prunes the id.
+  useEffect(() => {
+    setApplying((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(jobs.map((j) => j.id));
+      const next = new Set([...prev].filter((id) => present.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [jobs]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -383,15 +398,25 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
             {activeTab === 'queue' && (
               <td>
                 <div className="apply-actions">
-                  <a
+                  <button
                     className="apply-link"
-                    href={job.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+                    disabled={applying.has(job.id)}
+                    title={
+                      'Launch the bot for this job: it opens the application, fills every ' +
+                      'field it can, and stops before Submit so you can review. ' +
+                      'Enable auto-submit in Settings to have it submit too.'
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // The pipeline lets auto-apply runs start concurrently, so a
+                      // double-click would spawn a second browser for the same job.
+                      if (applying.has(job.id)) return;
+                      setApplying((prev) => new Set(prev).add(job.id));
+                      onAutoApply?.([job.id]);
+                    }}
                   >
-                    Apply
-                  </a>
+                    {applying.has(job.id) ? 'Applying…' : 'Apply'}
+                  </button>
                   <button
                     className="applied-btn"
                     title="Mark as applied"
