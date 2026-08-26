@@ -11,7 +11,7 @@
   "scripts": {
     "scraper": "npm run dev -w packages/scraper",
     "scraper:gmail-alerts": "npx tsx packages/scraper/src/phase-gmail-alerts.ts --watch --interval=60",
-    "scraper:phase4": "npm run phase4 -w packages/scraper",
+    "scraper:auto-apply": "npm run auto-apply -w packages/scraper",
     "shared:build": "npm run build -w packages/shared",
     "shared:dev": "npm run dev -w packages/shared",
     "api": "npm run shared:build && NODE_ENV=development npm run start:dev -w packages/api",

@@ -121,7 +121,7 @@ export class QuestionAnswererService {
 
   /**
    * Forget which job is being applied to. This service is a process-wide
-   * singleton and phase4 applies every job in one process, so a job left set
+   * singleton and auto-apply applies every job in one process, so a job left set
    * after its application ends would silently claim the next one's answers.
    */
   clearCurrentJob(): void {

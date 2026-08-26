@@ -118,7 +118,7 @@ export class GreenhouseApplyService {
       console.log('  No Autofill button found — filling manually...');
     }
 
-    // Cover letters are pre-generated in phase4 before browser launch
+    // Cover letters are pre-generated in auto-apply before browser launch
 
     // Fill form — wrap in try/catch so errors don't kill the watch loop
     try {

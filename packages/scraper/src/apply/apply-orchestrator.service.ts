@@ -20,7 +20,7 @@ export class ApplyOrchestratorService {
   async applyToJob(page: Page, job: ScoredJob, submit: boolean): Promise<ApplyResult> {
     // Tag every question answered from here on with this job. It has to happen at
     // this single entry point: QuestionAnswererService is a process-wide singleton
-    // and phase4 applies every job in one process, so before this the Greenhouse
+    // and auto-apply applies every job in one process, so before this the Greenhouse
     // and Ashby paths — which never set it — logged their answers under whichever
     // job the previous LinkedIn Easy Apply had left behind.
     this.questionAnswerer.setCurrentJob({ id: job.id, title: job.title, company: job.company });

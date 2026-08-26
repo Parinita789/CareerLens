@@ -5,7 +5,7 @@ import type { EasyApplyService } from '../apply/easy-apply.service';
 import type { LinkedInProbeService } from '../sourcing/linkedin-probe.service';
 import type { QuestionAnswererService } from '../answer-resolution/question-answerer.service';
 
-// QuestionAnswererService is a process-wide singleton and phase4 applies every job
+// QuestionAnswererService is a process-wide singleton and auto-apply applies every job
 // in one process, so whichever job is set when a question is answered is the job
 // that question gets filed under. These tests pin that down at the one entry point
 // every application path goes through.

@@ -62,7 +62,7 @@ Four regression harnesses + 132 unit tests. The harnesses call real LLM paths wi
 **Anti-fabrication validators**:
 
 - **Scorer** — post-parse filter drops any `matched_skill` whose lowercased text isn't a substring of `title + description`. Fabricated skills are logged to a per-run audit so you can see how often the LLM invents them.
-- **Rule-vs-LLM audit log** — phase4 counts how many form questions resolved via deterministic rule vs LLM fallback, per run. Tracks drift back toward the LLM as the rule corpus grows or new ATS forms surface unfamiliar question phrasings.
+- **Rule-vs-LLM audit log** — auto-apply counts how many form questions resolved via deterministic rule vs LLM fallback, per run. Tracks drift back toward the LLM as the rule corpus grows or new ATS forms surface unfamiliar question phrasings.
 - **Saved-answers context cap** — Q&A prompts include up to 30 saved answers, ranked by token overlap with the current question. Prevents prompt bloat AND prevents the LLM from latching onto an unrelated saved answer for similar-sounding questions (which used to happen with the unbounded list).
 
 **Seeding** — one-time setup:
@@ -304,8 +304,7 @@ npm run ui                      # Vite UI on port 5173
 # Individual phases from CLI:
 npm run scraper                 # Scrape + score
 npm run scraper:gmail-alerts    # Gmail LinkedIn alerts
-npm run scraper:phase3          # Cover letters for to_apply jobs
-npm run scraper:phase4          # Auto-apply (honors the UI's Auto-submit toggle)
+npm run scraper:auto-apply      # Auto-apply (honors the UI's Auto-submit toggle)
 ```
 
 After editing anything in `packages/shared/`, rebuild it so the API + scraper pick up the change (Mongoose schemas in particular load from `dist/` at boot):

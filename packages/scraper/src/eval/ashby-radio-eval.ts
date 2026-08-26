@@ -132,7 +132,7 @@ async function main() {
     await page.setContent(`<html><body><form>${c.html}</form></body></html>`);
 
     // The filler reports everything through console.log; capture it rather than
-    // reaching into internals, so the eval tests the same surface phase4 sees.
+    // reaching into internals, so the eval tests the same surface auto-apply sees.
     const logs: string[] = [];
     const realLog = console.log;
     console.log = (...args: unknown[]) => logs.push(args.join(' '));

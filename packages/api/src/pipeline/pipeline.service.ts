@@ -32,7 +32,7 @@ const PHASE_LIST = [
     label: 'Scrape + Score',
     name: 'scrape + score',
     cmd: 'npx',
-    args: ['tsx', 'src/phase2.ts'],
+    args: ['tsx', 'src/scrape-and-score.ts'],
   },
   {
     id: 'gmail-alerts',
@@ -51,7 +51,7 @@ const PHASE_LIST = [
     label: 'Auto Apply',
     name: 'auto apply',
     cmd: 'npx',
-    args: ['tsx', 'src/phase4.ts'],
+    args: ['tsx', 'src/auto-apply.ts'],
   },
 ];
 
@@ -62,17 +62,17 @@ const COMMANDS: Record<
   pipeline: {
     label: 'Full Pipeline',
     phases: [
-      { name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] },
-      { name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] },
+      { name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/scrape-and-score.ts'] },
+      { name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/auto-apply.ts'] },
     ],
   },
   scrape: {
     label: 'Scrape + Score',
-    phases: [{ name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/phase2.ts'] }],
+    phases: [{ name: 'scrape + score', cmd: 'npx', args: ['tsx', 'src/scrape-and-score.ts'] }],
   },
   apply: {
     label: 'Auto Apply',
-    phases: [{ name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/phase4.ts'] }],
+    phases: [{ name: 'auto apply', cmd: 'npx', args: ['tsx', 'src/auto-apply.ts'] }],
   },
 };
 
