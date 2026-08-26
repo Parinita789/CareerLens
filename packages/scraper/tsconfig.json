@@ -2,7 +2,15 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    // No rootDir. Nothing is emitted from this package (noEmit below, and every
+    // entry point runs through tsx), so rootDir has no output layout to govern —
+    // its only effect was TS6059 on @job-agent/shared, which resolves to
+    // ../shared/src and therefore sits outside src/ by design.
+    //
+    // Deliberately NOT switching the path below to ../shared/dist to silence
+    // that instead: tsx honours these mappings, so pointing at dist makes the
+    // scraper run a stale build of shared until someone remembers to rebuild it.
+    // Verified — a fresh export in shared/src was invisible via dist.
     "noEmit": true,
     "module": "es2022",
     "moduleResolution": "bundler",
