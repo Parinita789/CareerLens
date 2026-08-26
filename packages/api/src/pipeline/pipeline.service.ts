@@ -44,7 +44,7 @@ const PHASE_LIST = [
     // "running" until the timeout and starve any phase queued behind it. This
     // runs one Gmail fetch and exits; the always-on watcher is still available
     // as the standalone `npm run scraper:gmail-alerts` script.
-    args: ['tsx', 'src/phase-gmail-alerts.ts'],
+    args: ['tsx', 'src/gmail-alerts.ts'],
   },
   {
     id: 'apply',
