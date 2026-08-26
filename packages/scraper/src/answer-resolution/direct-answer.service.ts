@@ -259,6 +259,11 @@ export class DirectAnswerService {
     ) {
       return 'B. Tech';
     }
+    // "first-generation college student?" is a yes/no question that happens to
+    // contain "college" — it was being answered with the university's name.
+    if (labelLower.includes('first-generation') || labelLower.includes('first generation')) {
+      return 'No';
+    }
     if (
       labelLower.includes('university') ||
       labelLower.includes('school') ||
@@ -288,7 +293,13 @@ export class DirectAnswerService {
       return 'LinkedIn';
     }
 
-    // Demographics — always answer
+    // ── Demographics ──
+    // Order is load-bearing. These are substring tests, so the narrower question
+    // has to be answered before the broader token it contains — "do you identify
+    // as transgender?" contains "gender", and was being answered "Female".
+    if (labelLower.includes('transgender')) return 'No';
+    if (labelLower.includes('hispanic') || labelLower.includes('latino')) return 'No';
+    if (labelLower.includes('gender') && labelLower.includes('identify')) return 'Woman';
     if (labelLower.includes('gender')) return 'Female';
     if (labelLower.includes('race') || labelLower.includes('ethnicity')) return 'Asian';
     if (labelLower.includes('veteran')) return 'No';
@@ -296,6 +307,18 @@ export class DirectAnswerService {
     if (labelLower.includes('lgbtq') || labelLower.includes('sexual orientation'))
       return 'Heterosexual';
     if (labelLower.includes('pronoun')) return 'She/Her';
+    // Bare "I identify as:" — gender identity, distinct from the race/veteran/
+    // disability questions that also use the phrase, hence the exclusions.
+    if (
+      labelLower.includes('identify as') &&
+      !labelLower.includes('race') &&
+      !labelLower.includes('ethnicity') &&
+      !labelLower.includes('veteran') &&
+      !labelLower.includes('disability') &&
+      !labelLower.includes('orientation')
+    ) {
+      return 'Cisgender';
+    }
 
     // ── Generic yes/no — only for dropdowns, not text inputs ──
     if (fieldType === 'text') return null;

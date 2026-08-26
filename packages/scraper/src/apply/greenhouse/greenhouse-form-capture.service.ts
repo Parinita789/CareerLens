@@ -20,7 +20,15 @@ export class GreenhouseFormCaptureService {
             el.type === 'file' ||
             el.type === 'hidden' ||
             el.type === 'submit' ||
-            el.type === 'password'
+            el.type === 'password' ||
+            // Radios and checkboxes are handled by the dedicated passes below,
+            // which read the question from the enclosing fieldset's legend. Left
+            // in this sweep, each *option* was captured as its own question with
+            // el.value — which for an input with no value attribute is the
+            // browser default "on". That is where rules like
+            // "asian (not hispanic or latino)" -> "on" came from.
+            el.type === 'radio' ||
+            el.type === 'checkbox'
           )
             return;
 
@@ -62,12 +70,32 @@ export class GreenhouseFormCaptureService {
           if (legend && value) results.push({ label: legend, value, type: 'radio' });
         });
 
-        // Capture checked checkboxes
+        // Capture checked checkboxes. Grouped ones (a multi-select question such
+        // as race/ethnicity) must be recorded as ONE question keyed on the
+        // fieldset's legend, with the ticked options joined — recording each
+        // option label as its own question is what produced rules like
+        // "two or more races (not hispanic or latino)" -> "Yes".
+        // A checkbox with no fieldset is a standalone consent-style question, so
+        // there its own label genuinely is the question.
+        const checkedByGroup: Record<string, string[]> = {};
         document.querySelectorAll('input[type="checkbox"]:checked').forEach((el: any) => {
           const labelEl = document.querySelector('label[for="' + el.id + '"]');
           const label = labelEl?.textContent?.trim() || el.id?.replace(/[_-]/g, ' ') || '';
-          if (label) results.push({ label, value: 'Yes', type: 'checkbox' });
+          if (!label) return;
+          const legend = el.closest('fieldset')?.querySelector('legend')?.textContent?.trim() || '';
+          if (legend) {
+            (checkedByGroup[legend] ||= []).push(label);
+          } else {
+            results.push({ label, value: 'Yes', type: 'checkbox' });
+          }
         });
+        for (const legend in checkedByGroup) {
+          results.push({
+            label: legend,
+            value: checkedByGroup[legend].join(', '),
+            type: 'checkbox',
+          });
+        }
 
         // Also capture React Select values
         document.querySelectorAll('[class*="singleValue"], [class*="single-value"]').forEach((el) => {
