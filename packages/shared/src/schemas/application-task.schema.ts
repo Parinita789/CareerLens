@@ -17,6 +17,8 @@ export const APPLICATION_TASK_STATUSES = [
   'running',
   'succeeded',
   'failed',
+  /** Nothing to apply to — no form, or the worker deliberately passed. Terminal. */
+  'skipped',
   'needs_review',
   'cancelled',
 ] as const;

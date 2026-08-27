@@ -119,6 +119,69 @@ async function dispatcherChecks(svc: ApplicationTaskService) {
     JSON.stringify(rows.map((r) => r.attempts)));
 }
 
+async function entryPointChecks(svc: ApplicationTaskService) {
+  console.log('\n  Entry point\n');
+  const pipeline: any = new PipelineService(svc);
+  let spawned: string[][] = [];
+  pipeline.spawnWithLogs = async (_cmd: string, args: string[]) => {
+    spawned.push(args);
+  };
+
+  // The regression this exists for: auto-apply used to be handled only inside
+  // the `state.running` branch, so with nothing else running a click fell
+  // through to the sequential path and spawned one batch process for all jobs.
+  const ids = ['e1', 'e2', 'e3'].map((n) => P + n);
+  await pipeline.runSelectedPhases(['apply'], undefined, undefined, undefined, ids);
+  await new Promise((r) => setTimeout(r, 400));
+  check('apply with nothing running goes through the queue', spawned.length > 0 &&
+    spawned.every((a) => a.some((x) => x.startsWith('--task='))),
+    spawned.length ? spawned[0].join(' ') : 'nothing spawned');
+  check('never batches several jobs into one worker',
+    spawned.every((a) => !(a.find((x) => x.startsWith('--jobs=')) ?? '').includes(',')));
+  await ApplicationTaskModel.deleteMany(mine);
+
+  // Stop sets `cancelled`, which only the sequential pipeline ever cleared, so
+  // one Stop used to gate the dispatch loop off for good.
+  spawned = [];
+  pipeline.cancelled = true;
+  await pipeline.runSelectedPhases(['apply'], undefined, undefined, undefined, [P + 'e4']);
+  await new Promise((r) => setTimeout(r, 400));
+  // >= 1 because the stub records no outcome, so the task is also retried once.
+  // What matters is that anything dispatched at all.
+  check('a previous Stop does not gate later applications off', spawned.length >= 1, String(spawned.length));
+  await ApplicationTaskModel.deleteMany(mine);
+
+  // No explicit selection falls back to the batch worker, which owns the
+  // "which jobs are eligible" query.
+  spawned = [];
+  await pipeline.runSelectedPhases(['apply'], undefined, undefined, undefined, undefined);
+  await new Promise((r) => setTimeout(r, 300));
+  check('un-targeted apply still uses the batch worker',
+    spawned.length === 1 && !spawned[0].some((x) => x.startsWith('--task=')),
+    spawned.length ? spawned[0].join(' ') : 'nothing spawned');
+
+  // The live auto-submit toggle must win over the value stored at enqueue.
+  spawned = [];
+  const { UserModel } = await import('@job-agent/shared');
+  const user: any = await UserModel.findOne().lean();
+  const allowNow = user?.settings?.allowAutoSubmit === true;
+  await svc.enqueue([P + 'e5'], true);
+  await pipeline.dispatch();
+  await new Promise((r) => setTimeout(r, 400));
+  const submitFlag = spawned[0]?.find((x) => x.startsWith('--submit=')) ?? '';
+  check('submit flag re-reads the live toggle', submitFlag === `--submit=${allowNow}`,
+    `${submitFlag} with toggle ${allowNow}`);
+  await ApplicationTaskModel.deleteMany(mine);
+
+  // A job with no application form is terminal, not a failure to retry.
+  await svc.enqueue([P + 'e6'], false);
+  const claimed: any = await svc.claimNext();
+  await ApplicationTaskModel.findByIdAndUpdate(claimed._id, { $set: { status: 'skipped' } });
+  await svc.reconcileAfterExit(String(claimed._id));
+  const after: any = await ApplicationTaskModel.findById(claimed._id).lean();
+  check('a skipped application is terminal, never retried', after.status === 'skipped', after.status);
+}
+
 (async () => {
   await connectToDatabase();
   try {
@@ -136,9 +199,17 @@ async function dispatcherChecks(svc: ApplicationTaskService) {
       process.exit(2);
     }
 
+    // Clear rows stranded by an earlier aborted run before starting, not just
+    // after finishing: process.exit on failure can kill in-flight continuations
+    // and leave tasks mid-state for the next run to trip over.
+    const stale = await ApplicationTaskModel.deleteMany({ externalJobId: { $regex: `^${PREFIX}` } });
+    if (stale.deletedCount) console.log(`  (cleared ${stale.deletedCount} row(s) from a previous run)`);
+
     const svc = new ApplicationTaskService();
     await queueChecks(svc);
     await dispatcherChecks(svc);
+    await ApplicationTaskModel.deleteMany(mine);
+    await entryPointChecks(svc);
   } finally {
     const del = await ApplicationTaskModel.deleteMany({ externalJobId: { $regex: `^${PREFIX}` } });
     console.log(`\n  cleaned up ${del.deletedCount} row(s)`);

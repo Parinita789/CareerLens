@@ -184,19 +184,24 @@ export class PipelineService implements OnModuleInit {
     applyLimit?: number,
     applyJobIds?: string[],
   ): Promise<void> {
+    // Auto-apply is queue-driven and runs alongside whatever else is happening,
+    // so it is handled before the `running` guard rather than inside it. It used
+    // to be reachable only when a pipeline was already running, which meant the
+    // ordinary case -- click Apply with nothing else going on -- fell through to
+    // the sequential path and spawned one batch process instead of queueing.
+    const isAutoApplyOnly = phaseIds.length === 1 && phaseIds[0] === 'apply';
+    if (isAutoApplyOnly) {
+      await this.enqueueAndDispatch(applyPlatforms, applyLimit, applyJobIds);
+      return;
+    }
+
     // The `running` check must be reached without an intervening await. Reading
     // the auto-submit setting first yielded the event loop, so a burst of
     // simultaneous requests could all observe running === false, all take the
     // sequential path below, and each overwrite this.state — resetting the log
     // buffer and command label. The DB read now happens after a path is chosen.
     if (this.state.running) {
-      // Allow auto-apply to run concurrently with scraping
-      const isAutoApply = phaseIds.length === 1 && phaseIds[0] === 'apply';
-      if (!isAutoApply) {
-        throw new ConflictException('A command is already running');
-      }
-      await this.enqueueAndDispatch(applyPlatforms, applyLimit, applyJobIds);
-      return;
+      throw new ConflictException('A command is already running');
     }
 
     // Claim the slot synchronously, before any await. The guard above is only
@@ -323,6 +328,11 @@ export class PipelineService implements OnModuleInit {
       return;
     }
 
+    // Stop sets `cancelled`, and only the sequential pipeline ever cleared it.
+    // Without this, one Stop gated the dispatch loop off permanently: every
+    // later Apply enqueued a task that was never claimed.
+    this.cancelled = false;
+
     const allowAutoSubmit = await readAllowAutoSubmit();
     const { queued, skipped } = await this.tasks.enqueue(applyJobIds, allowAutoSubmit);
     this.addLog(
@@ -351,12 +361,16 @@ export class PipelineService implements OnModuleInit {
         const label = `${task.title ?? task.externalJobId}${task.company ? ` @ ${task.company}` : ''}`;
         this.addLog(`--- Applying: ${label} (attempt ${task.attempts}) ---`);
 
+        // Re-read the toggle rather than trusting the value stored at enqueue: a
+        // task may have waited, and turning auto-submit off must stop pending
+        // applications from submitting. Both have to agree.
+        const allowNow = await readAllowAutoSubmit();
         const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
         const args = [
           ...phase.args,
           `--jobs=${task.externalJobId}`,
           `--task=${taskId}`,
-          `--submit=${task.submit}`,
+          `--submit=${task.submit && allowNow}`,
         ];
 
         void this.autoApplyLimiter

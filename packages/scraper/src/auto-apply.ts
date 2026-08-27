@@ -292,6 +292,9 @@ async function main() {
     } else if (result.reason.includes('No Easy Apply') || result.reason.includes('No application form')) {
       console.log(`  SKIPPED: ${result.reason}`);
       results.skipped.push({ job: label, reason: result.reason });
+      // Terminal, not a failure: there is nothing here to apply to, so retrying
+      // would spend another browser launch reaching the same conclusion.
+      await taskContext.markFinished('skipped', result.reason);
       // Mark as rejected so it doesn't show up again
       job.status = 'rejected';
       job.reason = result.reason;
@@ -299,6 +302,7 @@ async function main() {
     } else if (result.reason.includes('skipped') || result.reason.includes('Timed out')) {
       console.log(`  SKIPPED — moving to next job`);
       results.skipped.push({ job: label, reason: result.reason });
+      await taskContext.markFinished('skipped', result.reason);
       // Don't change status — user can retry later
     } else {
       console.log(`  FAILED: ${result.reason}`);

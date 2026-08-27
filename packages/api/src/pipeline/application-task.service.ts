@@ -3,7 +3,7 @@ import { ApplicationTaskModel, JobModel, type ApplicationTaskStatus } from '@job
 import { decideAfterAbandonedRun, decideAfterFailure } from './application-task.policy';
 
 /** Terminal states: a task here will not be picked up again by the dispatcher. */
-const TERMINAL: ApplicationTaskStatus[] = ['succeeded', 'needs_review', 'cancelled'];
+const TERMINAL: ApplicationTaskStatus[] = ['succeeded', 'skipped', 'needs_review', 'cancelled'];
 
 /**
  * Owns the application queue: what is pending, who claimed it, how it ended, and
@@ -150,10 +150,6 @@ export class ApplicationTaskService {
 
   async list(limit = 100): Promise<any[]> {
     return ApplicationTaskModel.find().sort({ createdAt: -1 }).limit(limit).lean();
-  }
-
-  async pendingCount(): Promise<number> {
-    return ApplicationTaskModel.countDocuments({ status: 'queued' });
   }
 
   /** Manual retry — the only way a needs_review task can run again. */

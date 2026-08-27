@@ -38,7 +38,7 @@ export class ApplyTaskContextService {
    * happened. If the process dies before this runs, the API reconciles the row
    * from the child's exit instead.
    */
-  async markFinished(status: 'succeeded' | 'failed', lastError?: string): Promise<void> {
+  async markFinished(status: 'succeeded' | 'failed' | 'skipped', lastError?: string): Promise<void> {
     if (!this.taskId) return;
     await ApplicationTaskModel.findByIdAndUpdate(this.taskId, {
       $set: { status, finishedAt: new Date(), ...(lastError ? { lastError: lastError.slice(0, 500) } : {}) },
