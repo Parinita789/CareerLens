@@ -63,8 +63,10 @@ export class PipelineController {
   @Get('tasks')
   @ApiOperation({ summary: 'List application tasks, newest first — one row per job applied to.' })
   @ApiOkResponse({ description: 'Application task queue.' })
-  async listTasks() {
-    return this.applicationTasks.list();
+  @ApiQuery({ name: 'limit', required: false, description: 'How many to return, newest first. Default 100, max 500.' })
+  async listTasks(@Query('limit') limit?: string) {
+    const n = Number(limit);
+    return this.applicationTasks.list(Number.isFinite(n) && n > 0 ? Math.min(n, 500) : 100);
   }
 
   @Post('tasks/:id/retry')

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import type { ScoredJob, ApplicationTask } from '../types';
 import { TabBar } from './tab-bar';
+import { ApplicationsView } from './applications-view';
+import { countTasks } from './application-history';
 import { JobTable } from './job-table';
 import { JobDetail } from './job-detail';
 import { CommandPanel } from './command-panel';
@@ -13,14 +15,9 @@ import { CoverLettersPage, type CoverLetterJob } from './cover-letters';
 import { PendingQuestion } from './pending-question';
 import { PrepareReview } from './prepare-review';
 
-type Tab =
-  | 'queue'
-  | 'applied'
-  | 'interviewing'
-  | 'accepted'
-  | 'rejected'
-  | 'cover-letters'
-  | 'prepare';
+// Owned by TabBar, which renders them. Kept as one union so adding a tab can't
+// leave a second copy behind that silently rejects it.
+import type { Tab } from './tab-bar';
 type PlatformFilter = 'all' | 'linkedin' | 'greenhouse' | 'lever' | 'indeed' | 'ashby' | 'manual';
 
 export const INTERVIEW_ROUNDS = [
@@ -173,7 +170,7 @@ export function App() {
 
   const fetchApplicationTasks = useCallback(async () => {
     try {
-      const { data } = await axios.get('/api/pipeline/tasks');
+      const { data } = await axios.get('/api/pipeline/tasks?limit=300');
       setApplicationTasks(data);
     } catch {
       // A failed poll must not blank the table's badges.
@@ -199,6 +196,8 @@ export function App() {
    * a job id is the one that reflects its current state; earlier attempts are
    * history and would otherwise show a stale badge.
    */
+  const taskCounts = useMemo(() => countTasks(applicationTasks), [applicationTasks]);
+
   const taskByJobId = useMemo(() => {
     const map = new Map<string, ApplicationTask>();
     for (const t of applicationTasks) if (!map.has(t.externalJobId)) map.set(t.externalJobId, t);
@@ -270,6 +269,15 @@ export function App() {
     },
     [],
   );
+
+  const handleCancelTask = useCallback(async (taskId: string) => {
+    try {
+      await axios.post(`/api/pipeline/tasks/${taskId}/cancel`);
+      await fetchApplicationTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to cancel this application');
+    }
+  }, [fetchApplicationTasks]);
 
   const handleRetryTask = useCallback(async (taskId: string) => {
     try {
@@ -436,12 +444,14 @@ export function App() {
           rejected: rejected.length,
           coverLetters: coverLetterJobs.length,
           prepare: prepareJobs.filter((p: any) => p.status !== 'applied').length,
+          applications: taskCounts.attention,
         }}
+        applicationsNeedReview={taskCounts.needsReview}
         onOpenCommands={() => setCommandPanelOpen(true)}
         onOpenKeywords={() => setKeywordManagerOpen(true)}
       />
 
-      {activeTab !== 'cover-letters' && activeTab !== 'prepare' && (
+      {activeTab !== 'cover-letters' && activeTab !== 'prepare' && activeTab !== 'applications' && (
         <>
           <div className="filter-row">
             <div className="search-filter">
@@ -546,6 +556,14 @@ export function App() {
             onRetryTask={handleRetryTask}
           />
         </>
+      )}
+
+      {activeTab === 'applications' && (
+        <ApplicationsView
+          tasks={applicationTasks}
+          onRetryTask={handleRetryTask}
+          onCancelTask={handleCancelTask}
+        />
       )}
 
       {activeTab === 'prepare' && (
