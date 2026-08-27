@@ -28,7 +28,8 @@
     "eval:seed-rules": "npm run eval:seed-rules -w packages/scraper",
     "eval:seed-demographics": "npm run eval:seed-demographics -w packages/scraper",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "queue:check": "npm run queue:check -w packages/api"
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.5",

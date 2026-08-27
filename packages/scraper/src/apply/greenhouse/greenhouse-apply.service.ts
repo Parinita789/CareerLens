@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ApplyTaskContextService } from '../apply-task-context.service';
 import type { Page } from 'playwright';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,6 +25,7 @@ export class GreenhouseApplyService {
     @Inject(GreenhouseFormFillerService) private readonly formFiller: GreenhouseFormFillerService,
     @Inject(GreenhouseSubmissionWatcherService) private readonly submissionWatcher: GreenhouseSubmissionWatcherService,
     @Inject(GreenhouseFormCaptureService) private readonly formCapture: GreenhouseFormCaptureService,
+    @Inject(ApplyTaskContextService) private readonly taskContext: ApplyTaskContextService,
   ) {}
 
   async apply(page: Page, job: ScoredJob, submit: boolean = false): Promise<ApplicationResult> {
@@ -297,6 +299,10 @@ export class GreenhouseApplyService {
       );
       if (submitBtn) {
         console.log('  Clicking Submit...');
+        // Stamped before the click, not after: everything past this point may
+        // already have reached the employer, so the task must never be retried
+        // automatically even if this process dies mid-submit.
+        await this.taskContext.markSubmitAttempted();
         await submitBtn.click();
         await sleep(3000);
 

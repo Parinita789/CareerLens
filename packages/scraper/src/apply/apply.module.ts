@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AnswerResolutionModule } from '../answer-resolution/answer-resolution.module';
 import { SourcingModule } from '../sourcing/sourcing.module';
 import { FormHandlerService } from './form-handler.service';
+import { ApplyTaskContextService } from './apply-task-context.service';
 import { EasyApplyService } from './easy-apply.service';
 import { ApplyOrchestratorService } from './apply-orchestrator.service';
 import { GreenhouseFieldInspectorService } from './greenhouse/greenhouse-field-inspector.service';
@@ -17,6 +18,7 @@ import { GreenhouseApplyService } from './greenhouse/greenhouse-apply.service';
   imports: [AnswerResolutionModule, SourcingModule],
   providers: [
     FormHandlerService,
+    ApplyTaskContextService,
     EasyApplyService,
     ApplyOrchestratorService,
     GreenhouseFieldInspectorService,
@@ -28,6 +30,6 @@ import { GreenhouseApplyService } from './greenhouse/greenhouse-apply.service';
     GreenhouseFormFillerService,
     GreenhouseApplyService,
   ],
-  exports: [ApplyOrchestratorService, EasyApplyService, GreenhouseApplyService, FormHandlerService],
+  exports: [ApplyOrchestratorService, ApplyTaskContextService, EasyApplyService, GreenhouseApplyService, FormHandlerService],
 })
 export class ApplyModule {}

@@ -13,6 +13,7 @@ import {
 import { AppModule } from './app.module';
 import { ScraperPersistenceService } from './persistence/persistence.service';
 import { ApplyOrchestratorService } from './apply/apply-orchestrator.service';
+import { ApplyTaskContextService } from './apply/apply-task-context.service';
 import type { ScoredJob } from './types';
 
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
@@ -43,6 +44,14 @@ async function main() {
   // false (dry-run) so running without the flag is always safe.
   const submitArg = process.argv.find((a) => a.startsWith('--submit='));
   const submit = submitArg ? submitArg.split('=')[1] === 'true' : false;
+
+  // --task=<ApplicationTask id> — set when the API dispatches this process for a
+  // single queued application. Absent for a plain CLI run, in which case every
+  // task-context call is a no-op and nothing about the old behaviour changes.
+  const taskArg = process.argv.find((a) => a.startsWith('--task='));
+  const taskId = taskArg ? taskArg.split('=')[1] : null;
+  const taskContext = app.get(ApplyTaskContextService);
+  taskContext.setTaskId(taskId);
 
   console.log('Phase 4 — Auto Apply');
   console.log(`Platforms: ${allowedPlatforms.join(', ')} | Limit: ${limit === Infinity ? 'all' : limit}${specificJobIds ? ` | Jobs: ${specificJobIds.length} selected` : ''} | Submit: ${submit ? 'ENABLED' : 'DISABLED (dry-run)'}`);
@@ -268,6 +277,7 @@ async function main() {
     if (result.success) {
       console.log(`  APPLIED (${result.method})`);
       results.applied.push(label);
+      await taskContext.markFinished('succeeded');
 
       job.status = 'applied';
       job.applied_at = new Date().toISOString();
@@ -293,6 +303,7 @@ async function main() {
     } else {
       console.log(`  FAILED: ${result.reason}`);
       results.failed.push({ job: label, reason: result.reason });
+      await taskContext.markFinished('failed', result.reason);
     }
 
     // Delay between jobs — shorter when pre-filled, longer for manual fills

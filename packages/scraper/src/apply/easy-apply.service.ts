@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { PATHS } from '../config';
 import type { ScoredJob } from '../types';
 import { FormHandlerService } from './form-handler.service';
+import { ApplyTaskContextService } from './apply-task-context.service';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const randomDelay = () => sleep(1500 + Math.random() * 2000);
@@ -16,6 +17,7 @@ export type ApplicationResult =
 export class EasyApplyService {
   constructor(
     @Inject(FormHandlerService) private readonly formHandler: FormHandlerService,
+    @Inject(ApplyTaskContextService) private readonly taskContext: ApplyTaskContextService,
   ) {}
 
   async applyViaEasyApply(page: Page, job: ScoredJob, submit: boolean = false): Promise<ApplicationResult> {
@@ -95,6 +97,8 @@ export class EasyApplyService {
             return { success: false, reason: 'Review mode — timed out after 30 min' };
           }
           console.log('  Review step — submitting application...');
+          // See the note in greenhouse-apply.service.ts: stamped before the click.
+          await this.taskContext.markSubmitAttempted();
           await submitBtn.click();
           await randomDelay();
           console.log('  Submitted!');

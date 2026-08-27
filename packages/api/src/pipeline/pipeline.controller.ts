@@ -1,13 +1,17 @@
 import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery, ApiOkResponse } from '@nestjs/swagger';
 import { PipelineService } from './pipeline.service';
+import { ApplicationTaskService } from './application-task.service';
 import { RunPhasesDto } from './dto/run-phases.dto';
 import { AutoApplyDto } from './dto/auto-apply.dto';
 
 @ApiTags('pipeline')
 @Controller('pipeline')
 export class PipelineController {
-  constructor(private readonly pipelineService: PipelineService) {}
+  constructor(
+    private readonly pipelineService: PipelineService,
+    private readonly applicationTasks: ApplicationTaskService,
+  ) {}
 
   @Get('commands')
   @ApiOperation({ summary: 'List the preset commands (Full Pipeline, Scrape + Score, Auto Apply) the UI can trigger.' })
@@ -54,6 +58,32 @@ export class PipelineController {
   async autoApply(@Body() body: AutoApplyDto) {
     await this.pipelineService.runSelectedPhases(['apply'], undefined, undefined, undefined, body.jobIds);
     return { message: `Auto-applying to ${body.jobIds.length} jobs` };
+  }
+
+  @Get('tasks')
+  @ApiOperation({ summary: 'List application tasks, newest first — one row per job applied to.' })
+  @ApiOkResponse({ description: 'Application task queue.' })
+  async listTasks() {
+    return this.applicationTasks.list();
+  }
+
+  @Post('tasks/:id/retry')
+  @ApiOperation({
+    summary:
+      'Requeue one application. This is the only way a needs_review task runs again — those failed after a submit was attempted and are never retried automatically.',
+  })
+  @ApiOkResponse({ description: 'Task requeued.' })
+  async retryTask(@Param('id') id: string) {
+    await this.applicationTasks.retry(id);
+    return { message: 'Task requeued' };
+  }
+
+  @Post('tasks/:id/cancel')
+  @ApiOperation({ summary: 'Cancel a queued application before it starts.' })
+  @ApiOkResponse({ description: 'Task cancelled.' })
+  async cancelTask(@Param('id') id: string) {
+    await this.applicationTasks.cancel(id);
+    return { message: 'Task cancelled' };
   }
 
   @Post('stop')

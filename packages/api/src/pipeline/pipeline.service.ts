@@ -1,7 +1,8 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, type OnModuleInit } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
 import { UserModel, Limiter } from '@job-agent/shared';
+import { ApplicationTaskService } from './application-task.service';
 
 // Read the global "allow bot to submit" toggle from UserModel.settings. Falls
 // back to false (dry-run) on any error — safe default. Read fresh on every
@@ -86,13 +87,35 @@ const PHASE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const MAX_CONCURRENT_AUTO_APPLY = 2;
 
 @Injectable()
-export class PipelineService {
+export class PipelineService implements OnModuleInit {
+  constructor(private readonly tasks: ApplicationTaskService) {}
+
+  /**
+   * Any task still marked running belongs to a process that died with the last
+   * API instance. Settle those, then pick up whatever is still queued.
+   */
+  async onModuleInit(): Promise<void> {
+    await this.tasks.reapAbandoned().catch(() => 0);
+    void this.dispatch();
+  }
+
   // Every live child. runSelectedPhases deliberately lets an auto-apply run
   // alongside an already-running pipeline, so a single-slot handle got
   // clobbered by the second spawn: Stop would kill the auto-apply and orphan
   // the scrape, and whichever child exited first would clear the handle for the
   // one still running, leaving Stop with nothing to kill.
   private activeChildren = new Set<ChildProcess>();
+
+  /** Guards the dispatch loop so concurrent enqueues don't each start one. */
+  private dispatching = false;
+
+  /**
+   * Set when dispatch is asked to run while a loop is already going. Without it
+   * the second caller returns immediately and a task enqueued during the first
+   * loop's `await` can sit unclaimed until something else happens to trigger a
+   * dispatch.
+   */
+  private dispatchAgain = false;
   // Bounds how many auto-apply browsers can be open at once.
   private readonly autoApplyLimiter = new Limiter(MAX_CONCURRENT_AUTO_APPLY);
   private cancelled = false;
@@ -172,35 +195,7 @@ export class PipelineService {
       if (!isAutoApply) {
         throw new ConflictException('A command is already running');
       }
-      const allowAutoSubmit = await readAllowAutoSubmit();
-      // Spawn independently without blocking the running pipeline
-      console.log('[Pipeline] Running Auto Apply concurrently with:', this.state.command);
-      const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
-      const args = [...phase.args];
-      if (applyPlatforms && applyPlatforms.length > 0)
-        args.push(`--platforms=${applyPlatforms.join(',')}`);
-      if (applyLimit) args.push(`--limit=${applyLimit}`);
-      if (applyJobIds && applyJobIds.length > 0) args.push(`--jobs=${applyJobIds.join(',')}`);
-      args.push(`--submit=${allowAutoSubmit}`);
-      const scraperDir = SCRAPER_DIR_RESOLVER();
-      const queued = this.autoApplyLimiter.inFlight >= MAX_CONCURRENT_AUTO_APPLY;
-      this.addLog(
-        queued
-          ? `--- Auto Apply queued (${MAX_CONCURRENT_AUTO_APPLY} already running) ---`
-          : '--- Auto Apply started (concurrent) ---',
-      );
-      // Through the limiter: each spawn drives its own visible Chromium that
-      // stays open for review, so N clicks used to mean N browsers. Ten clicks
-      // measured at ~80 Chrome processes and ~3 GB. Extra requests now wait for
-      // a slot rather than piling on.
-      this.autoApplyLimiter
-        .run(() => this.spawnWithLogs(phase.cmd, args, scraperDir))
-        .then(() => {
-          this.addLog('--- Auto Apply completed ---');
-        })
-        .catch((err) => {
-          this.addLog(`ERROR: Auto Apply failed — ${(err as Error).message}`);
-        });
+      await this.enqueueAndDispatch(applyPlatforms, applyLimit, applyJobIds);
       return;
     }
 
@@ -278,10 +273,19 @@ export class PipelineService {
   }
 
   stopPipeline(): void {
+    // Set before anything async: a dispatch already in flight checks this
+    // between claims, so flipping it first stops another worker from starting.
+    this.cancelled = true;
+
+    // Queued tasks have to go too. Killing the running child only frees a slot,
+    // and the dispatcher would immediately start the next application.
+    void this.tasks.cancelAllQueued().then((n) => {
+      if (n > 0) this.addLog(`--- Cancelled ${n} queued application(s) ---`);
+    });
+
     // A concurrent auto-apply can still be alive after the pipeline itself has
     // finished, so don't bail purely on `running`.
     if (!this.state.running && this.activeChildren.size === 0) return;
-    this.cancelled = true;
 
     // Snapshot: the force-kill below must target exactly what was alive at stop
     // time, never something spawned during the 3s grace period.
@@ -300,6 +304,104 @@ export class PipelineService {
     this.state.phase = null;
     this.state.error = 'Stopped by user';
     this.state.lastRunAt = new Date().toISOString();
+  }
+
+  /**
+   * Turn an auto-apply request into one queued task per job, then fill any free
+   * worker slots. Single and bulk are the same operation — bulk is just more rows.
+   */
+  private async enqueueAndDispatch(
+    applyPlatforms?: string[],
+    applyLimit?: number,
+    applyJobIds?: string[],
+  ): Promise<void> {
+    if (!applyJobIds || applyJobIds.length === 0) {
+      // No explicit selection: fall back to the batch worker, which owns the
+      // "which jobs are eligible" logic. Duplicating that query here would be a
+      // second source of truth for it.
+      await this.spawnBatchApply(applyPlatforms, applyLimit);
+      return;
+    }
+
+    const allowAutoSubmit = await readAllowAutoSubmit();
+    const { queued, skipped } = await this.tasks.enqueue(applyJobIds, allowAutoSubmit);
+    this.addLog(
+      `--- Queued ${queued} application(s)${skipped ? `, skipped ${skipped} already in flight` : ''} ---`,
+    );
+    void this.dispatch();
+  }
+
+  /**
+   * Claim queued tasks up to the concurrency cap and run one worker process per
+   * application. Each drives its own visible Chromium, which is why the cap is
+   * small — ten at once measured ~80 Chrome processes and ~3 GB.
+   */
+  private async dispatch(): Promise<void> {
+    if (this.dispatching) {
+      this.dispatchAgain = true;
+      return;
+    }
+    this.dispatching = true;
+    try {
+      while (!this.cancelled && this.autoApplyLimiter.inFlight < MAX_CONCURRENT_AUTO_APPLY) {
+        const task = await this.tasks.claimNext();
+        if (!task) break;
+
+        const taskId = String(task._id);
+        const label = `${task.title ?? task.externalJobId}${task.company ? ` @ ${task.company}` : ''}`;
+        this.addLog(`--- Applying: ${label} (attempt ${task.attempts}) ---`);
+
+        const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
+        const args = [
+          ...phase.args,
+          `--jobs=${task.externalJobId}`,
+          `--task=${taskId}`,
+          `--submit=${task.submit}`,
+        ];
+
+        void this.autoApplyLimiter
+          .run(() => this.spawnWithLogs(phase.cmd, args, SCRAPER_DIR_RESOLVER(), taskId))
+          .catch((err) => {
+            this.addLog(`ERROR: ${label} — ${(err as Error).message}`);
+          })
+          .then(async () => {
+            if (this.cancelled) {
+              // Never reconcile a task the user stopped: that path counts the
+              // attempt and requeues, so Stop would restart what it just killed.
+              await this.tasks.markStopped(taskId).catch(() => {});
+              return;
+            }
+            // The worker records its own outcome when it can; this settles the
+            // cases where it could not, and decides whether a retry is safe.
+            await this.tasks.reconcileAfterExit(taskId).catch(() => {});
+            this.addLog(`--- Finished: ${label} ---`);
+            void this.dispatch(); // a slot just freed up
+          });
+      }
+    } finally {
+      this.dispatching = false;
+    }
+    // Something asked for a dispatch while this loop held the flag; run once more
+    // so that request isn't dropped.
+    if (this.dispatchAgain && !this.cancelled) {
+      this.dispatchAgain = false;
+      await this.dispatch();
+    }
+  }
+
+  /** The un-targeted apply phase: one process that picks its own jobs. */
+  private async spawnBatchApply(applyPlatforms?: string[], applyLimit?: number): Promise<void> {
+    const allowAutoSubmit = await readAllowAutoSubmit();
+    const phase = PHASE_LIST.find((p) => p.id === 'apply')!;
+    const args = [...phase.args];
+    if (applyPlatforms && applyPlatforms.length > 0) args.push(`--platforms=${applyPlatforms.join(',')}`);
+    if (applyLimit) args.push(`--limit=${applyLimit}`);
+    args.push(`--submit=${allowAutoSubmit}`);
+    this.addLog('--- Auto Apply started (batch) ---');
+    this.autoApplyLimiter
+      .run(() => this.spawnWithLogs(phase.cmd, args, SCRAPER_DIR_RESOLVER()))
+      .then(() => this.addLog('--- Auto Apply completed ---'))
+      .catch((err) => this.addLog(`ERROR: Auto Apply failed — ${(err as Error).message}`));
   }
 
   private addLog(line: string) {
@@ -343,7 +445,7 @@ export class PipelineService {
     this.addLog(`--- ${this.state.command} completed ---`);
   }
 
-  private spawnWithLogs(cmd: string, args: string[], cwd: string): Promise<void> {
+  private spawnWithLogs(cmd: string, args: string[], cwd: string, taskId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const child = spawn(cmd, args, {
         cwd,
@@ -351,6 +453,9 @@ export class PipelineService {
       });
 
       this.activeChildren.add(child);
+      // Recorded so a task abandoned by a crashed API can be told apart from one
+      // that never started.
+      if (taskId) void this.tasks.setPid(taskId, child.pid);
 
       // Cleared on exit. Previously this timer was never cancelled, so every
       // spawn left a 2-hour handle holding the child in a closure — even for
