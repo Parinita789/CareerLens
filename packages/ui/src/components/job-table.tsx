@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import type { ScoredJob } from '../types';
+import { describeTask } from './task-view';
+import type { ScoredJob, ApplicationTask } from '../types';
 import { INTERVIEW_ROUNDS, ACCEPTED_OUTCOMES, roleKey } from './app';
 
 // Shown on a Queue row when the same role is already tracked elsewhere, so an
@@ -38,6 +39,9 @@ interface JobTableProps {
     acceptedOutcome?: string,
   ) => void;
   onAutoApply?: (jobIds: string[]) => void;
+  /** Newest application task per job id, keyed by ScoredJob.id. */
+  taskByJobId?: Map<string, ApplicationTask>;
+  onRetryTask?: (taskId: string) => void;
   onCancelSelect?: () => void;
   /** roleKey -> the status this role already has elsewhere, for the Queue badge. */
   trackedStatusByRole?: Map<string, string>;
@@ -66,23 +70,24 @@ function scoreClass(score: number): string {
   return 'low';
 }
 
-export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect, trackedStatusByRole }: JobTableProps) {
+export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSelectJob, onDismissJob, onMarkApplied, onUpdateStatus, onAutoApply, onCancelSelect, trackedStatusByRole, taskByJobId, onRetryTask }: JobTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Rows whose bot run has been kicked off. Cleared when the job leaves the
   // Queue (status flips to applied), which is the real completion signal.
   const [applying, setApplying] = useState<Set<string>>(new Set());
 
-  // A launched job stays "Applying…" until it leaves the Queue — the bot holds the
-  // browser open for review, so the run really is still in flight. app.tsx repolls
-  // every 5s, so the row vanishes once the status flips and this prunes the id.
+  // Purely to bridge the moment between the click and the task appearing in the
+  // queue poll. Once a task exists the server's status is authoritative, so the
+  // optimistic id is dropped — otherwise a finished row would still read
+  // "Applying…" because nothing local ever cleared it.
   useEffect(() => {
     setApplying((prev) => {
       if (prev.size === 0) return prev;
       const present = new Set(jobs.map((j) => j.id));
-      const next = new Set([...prev].filter((id) => present.has(id)));
+      const next = new Set([...prev].filter((id) => present.has(id) && !taskByJobId?.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [jobs]);
+  }, [jobs, taskByJobId]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -398,25 +403,48 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
             {activeTab === 'queue' && (
               <td>
                 <div className="apply-actions">
-                  <button
-                    className="apply-link"
-                    disabled={applying.has(job.id)}
-                    title={
-                      'Launch the bot for this job: it opens the application, fills every ' +
-                      'field it can, and stops before Submit so you can review. ' +
-                      'Enable auto-submit in Settings to have it submit too.'
+                  {(() => {
+                    const task = taskByJobId?.get(job.id);
+                    const view = describeTask(task, applying.has(job.id));
+                    if (view.kind === 'status') {
+                      return (
+                        <span className={`task-badge ${view.tone}`} title={view.title}>
+                          {view.label}
+                        </span>
+                      );
                     }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // The pipeline lets auto-apply runs start concurrently, so a
-                      // double-click would spawn a second browser for the same job.
-                      if (applying.has(job.id)) return;
-                      setApplying((prev) => new Set(prev).add(job.id));
-                      onAutoApply?.([job.id]);
-                    }}
-                  >
-                    {applying.has(job.id) ? 'Applying…' : 'Apply'}
-                  </button>
+                    if (view.kind === 'retry') {
+                      return (
+                        <button
+                          className={`task-badge ${view.tone} retryable`}
+                          title={view.title}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRetryTask?.(task!._id);
+                          }}
+                        >
+                          {view.label}
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        className="apply-link"
+                        title={
+                          'Launch the bot for this job: it opens the application, fills every ' +
+                          'field it can, and stops before Submit so you can review. ' +
+                          'Enable auto-submit in Settings to have it submit too.'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setApplying((prev) => new Set(prev).add(job.id));
+                          onAutoApply?.([job.id]);
+                        }}
+                      >
+                        Apply
+                      </button>
+                    );
+                  })()}
                   <button
                     className="applied-btn"
                     title="Mark as applied"

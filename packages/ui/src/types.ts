@@ -56,3 +56,32 @@ export interface AlertKeyword {
   location: string;
   label: string;
 }
+
+/**
+ * One queued application to one job. Mirrors the ApplicationTask collection —
+ * see the note above for why these types are declared here rather than imported
+ * from @job-agent/shared.
+ */
+export type ApplicationTaskStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'skipped'
+  | 'needs_review'
+  | 'cancelled';
+
+export interface ApplicationTask {
+  _id: string;
+  externalJobId: string;
+  title?: string;
+  company?: string;
+  status: ApplicationTaskStatus;
+  attempts: number;
+  maxAttempts: number;
+  lastError?: string;
+  /** Set means the application may already have reached the employer. */
+  submitAttemptedAt?: string;
+  createdAt: string;
+  finishedAt?: string;
+}

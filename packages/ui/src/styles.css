@@ -460,6 +460,34 @@ h1 {
 .platform.indeed { background: rgba(44, 94, 199, 0.15); color: #6b8de3; }
 .platform.ashby { background: var(--yellow-dim); color: var(--yellow); }
 
+/* Application task badges — the Apply column in the Queue tab */
+.task-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border: none;
+  font-family: inherit;
+}
+.task-badge.retryable { cursor: pointer; }
+.task-badge.retryable:hover { filter: brightness(1.25); }
+.task-badge.queued { background: var(--blue-dim); color: var(--blue); }
+.task-badge.running { background: var(--yellow-dim); color: var(--yellow); }
+.task-badge.succeeded { background: var(--green-dim); color: var(--green); }
+.task-badge.failed { background: var(--red-dim); color: var(--red); }
+.task-badge.skipped { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+/* Deliberately the loudest of the set: it means the application may already
+   have been submitted, and clicking retry could send a second one. */
+.task-badge.needs-review {
+  background: var(--orange-dim);
+  color: var(--orange);
+  box-shadow: inset 0 0 0 1px var(--orange);
+}
+
 /* Auto Apply Bar */
 .auto-apply-bar {
   display: flex;

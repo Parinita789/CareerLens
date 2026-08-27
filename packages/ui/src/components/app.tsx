@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import type { ScoredJob } from '../types';
+import type { ScoredJob, ApplicationTask } from '../types';
 import { TabBar } from './tab-bar';
 import { JobTable } from './job-table';
 import { JobDetail } from './job-detail';
@@ -70,6 +70,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [autoApplyMode, setAutoApplyMode] = useState(false);
+  const [applicationTasks, setApplicationTasks] = useState<ApplicationTask[]>([]);
   const [scoreFilter, setScoreFilter] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [newOnlyFilter, setNewOnlyFilter] = useState(false);
@@ -170,11 +171,39 @@ export function App() {
     await fetchCoverLetters();
   }, [fetchJobs, fetchCoverLetters]);
 
+  const fetchApplicationTasks = useCallback(async () => {
+    try {
+      const { data } = await axios.get('/api/pipeline/tasks');
+      setApplicationTasks(data);
+    } catch {
+      // A failed poll must not blank the table's badges.
+    }
+  }, []);
+
   // Poll for new jobs every 5 seconds — keeps UI in sync with real-time scoring
   useEffect(() => {
     const interval = setInterval(fetchJobs, 5000);
     return () => clearInterval(interval);
   }, [fetchJobs]);
+
+  // Application tasks move faster than jobs do — a worker starts, fails and is
+  // requeued well inside one 5s job poll — so they get their own, quicker one.
+  useEffect(() => {
+    void fetchApplicationTasks();
+    const interval = setInterval(fetchApplicationTasks, 2500);
+    return () => clearInterval(interval);
+  }, [fetchApplicationTasks]);
+
+  /**
+   * Newest task per job. The API returns newest first, so the first sighting of
+   * a job id is the one that reflects its current state; earlier attempts are
+   * history and would otherwise show a stale badge.
+   */
+  const taskByJobId = useMemo(() => {
+    const map = new Map<string, ApplicationTask>();
+    for (const t of applicationTasks) if (!map.has(t.externalJobId)) map.set(t.externalJobId, t);
+    return map;
+  }, [applicationTasks]);
 
   const handleDismissJob = useCallback(async (job: ScoredJob) => {
     try {
@@ -242,15 +271,27 @@ export function App() {
     [],
   );
 
+  const handleRetryTask = useCallback(async (taskId: string) => {
+    try {
+      await axios.post(`/api/pipeline/tasks/${taskId}/retry`);
+      await fetchApplicationTasks();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to retry this application');
+    }
+  }, [fetchApplicationTasks]);
+
   const handleAutoApply = useCallback(async (jobIds: string[]) => {
     try {
       await axios.post('/api/pipeline/auto-apply', { jobIds });
+      // Pull the queue straight away so the row shows Queued rather than
+      // sitting on optimistic local state until the next poll.
+      await fetchApplicationTasks();
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to start auto-apply';
       alert(msg);
       console.error('Failed to start auto-apply:', msg);
     }
-  }, []);
+  }, [fetchApplicationTasks]);
 
   // Split by status FIRST — these arrays drive the tab badge counts and must
   // reflect totals, not the currently-applied filter (otherwise filtering on
@@ -501,6 +542,8 @@ export function App() {
               setAutoApplyMode(false);
             }}
             onCancelSelect={() => setAutoApplyMode(false)}
+            taskByJobId={taskByJobId}
+            onRetryTask={handleRetryTask}
           />
         </>
       )}
