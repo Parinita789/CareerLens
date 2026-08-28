@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import mongoose from 'mongoose';
 import { ApplicationTaskModel, JobModel, type ApplicationTaskStatus } from '@job-agent/shared';
 import { decideAfterAbandonedRun, decideAfterFailure } from './application-task.policy';
 
@@ -152,19 +153,47 @@ export class ApplicationTaskService {
     return ApplicationTaskModel.find().sort({ createdAt: -1 }).limit(limit).lean();
   }
 
-  /** Manual retry — the only way a needs_review task can run again. */
+  /**
+   * Ids arrive from URLs, so a malformed one is a client mistake rather than a
+   * server fault. Without this Mongoose raises a CastError and Nest turns it
+   * into a 500.
+   */
+  private requireValidId(taskId: string): void {
+    if (!mongoose.Types.ObjectId.isValid(taskId)) {
+      throw new NotFoundException(`No application task with id "${taskId}"`);
+    }
+  }
+
+  /**
+   * Manual retry — the only way a needs_review task can run again.
+   *
+   * Refuses a task that is currently running: requeueing one would let the
+   * dispatcher claim it while its worker is still filling the form, so two
+   * browsers would apply to the same job at once.
+   */
   async retry(taskId: string): Promise<void> {
-    await ApplicationTaskModel.findByIdAndUpdate(taskId, {
+    this.requireValidId(taskId);
+    const existing: any = await ApplicationTaskModel.findById(taskId).select('status').lean();
+    if (!existing) throw new NotFoundException(`No application task with id "${taskId}"`);
+    if (existing.status === 'running') {
+      throw new ConflictException('This application is still running — stop it before retrying.');
+    }
+    const updated = await ApplicationTaskModel.findByIdAndUpdate(taskId, {
       $set: { status: 'queued', attempts: 0 },
       $unset: { claimedAt: '', claimedBy: '', pid: '', finishedAt: '', lastError: '', submitAttemptedAt: '' },
     });
+    if (!updated) throw new NotFoundException(`No application task with id "${taskId}"`);
   }
 
   async cancel(taskId: string): Promise<void> {
-    await ApplicationTaskModel.findOneAndUpdate(
+    this.requireValidId(taskId);
+    // Only queued work can be cancelled; anything already running has a process
+    // behind it and is stopped through Stop instead.
+    const updated = await ApplicationTaskModel.findOneAndUpdate(
       { _id: taskId, status: 'queued' },
       { $set: { status: 'cancelled', finishedAt: new Date() } },
     );
+    if (!updated) throw new NotFoundException(`No queued application task with id "${taskId}"`);
   }
 
   /**

@@ -170,12 +170,15 @@ export function App() {
 
   const fetchApplicationTasks = useCallback(async () => {
     try {
-      const { data } = await axios.get('/api/pipeline/tasks?limit=300');
+      // Only the Applications tab reads history; the job-table badges just need
+      // the live ones. Fetching 300 rows every 2.5s regardless was needless.
+      const limit = activeTab === 'applications' ? 300 : 100;
+      const { data } = await axios.get(`/api/pipeline/tasks?limit=${limit}`);
       setApplicationTasks(data);
     } catch {
       // A failed poll must not blank the table's badges.
     }
-  }, []);
+  }, [activeTab]);
 
   // Poll for new jobs every 5 seconds — keeps UI in sync with real-time scoring
   useEffect(() => {
@@ -288,16 +291,21 @@ export function App() {
     }
   }, [fetchApplicationTasks]);
 
-  const handleAutoApply = useCallback(async (jobIds: string[]) => {
+  const handleAutoApply = useCallback(async (jobIds: string[]): Promise<boolean> => {
     try {
       await axios.post('/api/pipeline/auto-apply', { jobIds });
       // Pull the queue straight away so the row shows Queued rather than
       // sitting on optimistic local state until the next poll.
       await fetchApplicationTasks();
+      return true;
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Failed to start auto-apply';
       alert(msg);
       console.error('Failed to start auto-apply:', msg);
+      // Returned rather than thrown: the table needs to know so it can drop its
+      // optimistic row state, but the other call sites don't await this and a
+      // rejection there would surface as an unhandled promise.
+      return false;
     }
   }, [fetchApplicationTasks]);
 

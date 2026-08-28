@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ApplicationTask } from '../types';
 import { describeTask } from './task-view';
-import { countTasks, matchesFilter, relativeTime, type TaskFilter } from './application-history';
+import { countTasks, defaultFilter, matchesFilter, relativeTime, type TaskFilter } from './application-history';
 
 interface ApplicationsViewProps {
   tasks: ApplicationTask[];
@@ -24,8 +24,12 @@ const FILTERS: { key: TaskFilter; label: string }[] = [
  */
 export function ApplicationsView({ tasks, onRetryTask, onCancelTask }: ApplicationsViewProps) {
   const counts = countTasks(tasks);
-  // Open on whatever needs a decision; fall back to everything when nothing does.
-  const [filter, setFilter] = useState<TaskFilter>(counts.attention > 0 ? 'attention' : 'all');
+  // Null until the user picks one. Computing a default in useState froze it at
+  // mount, when the first poll may not have landed and every count was zero —
+  // so the "open on what needs a decision" behaviour silently never happened.
+  // Deriving it keeps that promise without ever overriding an explicit choice.
+  const [chosen, setChosen] = useState<TaskFilter | null>(null);
+  const filter = chosen ?? defaultFilter(counts);
   const shown = tasks.filter((t) => matchesFilter(t, filter));
 
   return (
@@ -46,7 +50,7 @@ export function ApplicationsView({ tasks, onRetryTask, onCancelTask }: Applicati
           <button
             key={f.key}
             className={`filter-btn ${filter === f.key ? 'active' : ''}`}
-            onClick={() => setFilter(f.key)}
+            onClick={() => setChosen(f.key)}
           >
             {f.label} <span className="count">({counts[f.key]})</span>
           </button>
@@ -100,6 +104,10 @@ export function ApplicationsView({ tasks, onRetryTask, onCancelTask }: Applicati
                         Cancel
                       </button>
                     ) : task.status === 'running' ? (
+                      <span className="task-detail">—</span>
+                    ) : task.status === 'succeeded' ? (
+                      // No retry: this one went through, and re-running it would
+                      // send the employer a second application.
                       <span className="task-detail">—</span>
                     ) : (
                       <button

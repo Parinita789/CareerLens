@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchesFilter, countTasks, relativeTime } from '../components/application-history';
+import { matchesFilter, countTasks, relativeTime, defaultFilter } from '../components/application-history';
 import type { ApplicationTask, ApplicationTaskStatus } from '../types';
 
 const t = (status: ApplicationTaskStatus, over: Partial<ApplicationTask> = {}): ApplicationTask => ({
@@ -65,5 +65,20 @@ describe('relativeTime', () => {
   });
   it('does not show negative ages from small clock skew', () => {
     expect(relativeTime('2026-08-27T12:00:05.000Z', now)).toBe('just now');
+  });
+});
+
+describe('defaultFilter', () => {
+  it('opens on what needs a decision when anything does', () => {
+    expect(defaultFilter(countTasks([t('needs_review'), t('succeeded')]))).toBe('attention');
+    expect(defaultFilter(countTasks([t('failed')]))).toBe('attention');
+  });
+
+  it('shows everything when nothing needs attention', () => {
+    expect(defaultFilter(countTasks([t('succeeded'), t('running')]))).toBe('all');
+  });
+
+  it('shows everything for an empty queue rather than an empty attention list', () => {
+    expect(defaultFilter(countTasks([]))).toBe('all');
   });
 });

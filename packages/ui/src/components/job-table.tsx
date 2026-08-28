@@ -38,7 +38,8 @@ interface JobTableProps {
     interviewRound?: string,
     acceptedOutcome?: string,
   ) => void;
-  onAutoApply?: (jobIds: string[]) => void;
+  /** Resolves false when the request failed, so the row can stop saying "Starting…". */
+  onAutoApply?: (jobIds: string[]) => void | Promise<boolean | void>;
   /** Newest application task per job id, keyed by ScoredJob.id. */
   taskByJobId?: Map<string, ApplicationTask>;
   onRetryTask?: (taskId: string) => void;
@@ -438,7 +439,20 @@ export function JobTable({ jobs, activeTab, selectMode, sortBy = 'default', onSe
                         onClick={(e) => {
                           e.stopPropagation();
                           setApplying((prev) => new Set(prev).add(job.id));
-                          onAutoApply?.([job.id]);
+                          // If the request fails no task is ever created, so the
+                          // optimistic id has to be dropped here or the row reads
+                          // "Starting…" indefinitely.
+                          const clear = () =>
+                            setApplying((prev) => {
+                              const next = new Set(prev);
+                              next.delete(job.id);
+                              return next;
+                            });
+                          void Promise.resolve(onAutoApply?.([job.id]))
+                            .then((ok) => {
+                              if (ok === false) clear();
+                            })
+                            .catch(clear);
                         }}
                       >
                         Apply

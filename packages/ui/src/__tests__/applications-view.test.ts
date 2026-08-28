@@ -51,6 +51,13 @@ describe('ApplicationsView', () => {
     expect(render([task('needs_review')])).toContain('Retry anyway');
   });
 
+  it('offers no way to re-send a completed application', () => {
+    // Retrying a succeeded task would put a second application in front of the
+    // same employer, which is the harm the whole needs_review path guards.
+    const html = render([task('succeeded')]);
+    expect(html).not.toContain('Retry');
+  });
+
   it('offers no action while a worker is mid-application', () => {
     const html = render([task('running')]);
     expect(html).not.toContain('Retry');

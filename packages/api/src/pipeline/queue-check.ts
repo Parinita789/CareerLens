@@ -173,6 +173,21 @@ async function entryPointChecks(svc: ApplicationTaskService) {
     `${submitFlag} with toggle ${allowNow}`);
   await ApplicationTaskModel.deleteMany(mine);
 
+  // Requeueing a running task would let the dispatcher claim it while its
+  // worker is still filling the form — two browsers, one job.
+  await svc.enqueue([P + 'e7'], false);
+  const running: any = await svc.claimNext();
+  let refused = false;
+  try {
+    await svc.retry(String(running._id));
+  } catch {
+    refused = true;
+  }
+  const stillRunning: any = await ApplicationTaskModel.findById(running._id).lean();
+  check('refuses to requeue an application that is still running',
+    refused && stillRunning.status === 'running', `refused=${refused} status=${stillRunning.status}`);
+  await ApplicationTaskModel.deleteMany(mine);
+
   // A job with no application form is terminal, not a failure to retry.
   await svc.enqueue([P + 'e6'], false);
   const claimed: any = await svc.claimNext();

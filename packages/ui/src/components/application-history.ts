@@ -41,6 +41,15 @@ export function countTasks(tasks: ApplicationTask[]): TaskCounts {
 }
 
 /**
+ * Which filter to show before the user picks one. Derived from the counts on
+ * every render rather than seeded into state, so it still holds once tasks
+ * arrive from the first poll.
+ */
+export function defaultFilter(counts: TaskCounts): TaskFilter {
+  return counts.attention > 0 ? 'attention' : 'all';
+}
+
+/**
  * Compact relative time. Application runs are minutes-to-hours old and the
  * column is narrow, so absolute timestamps waste the space.
  */
