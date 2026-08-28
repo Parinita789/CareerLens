@@ -130,7 +130,7 @@ async function scrapeIndeedPage(
           'responded', 'often replies', 'replies', 'days', 'today', 'employer',
           'full-time', 'part-time', 'contract', 'temporary', 'remote', 'hybrid',
         ];
-        const allText = card.querySelectorAll('span, div, a');
+        const allText = Array.from(card.querySelectorAll('span, div, a'));
         for (const el of allText) {
           if (el === a) continue;
           const text = el.textContent?.trim() || '';

@@ -62,7 +62,6 @@ async function main() {
   if (specificJobIds) {
     const { JobModel } = await import('./persistence/db');
     const docs = await JobModel.find({ externalId: { $in: specificJobIds } }).lean();
-    const { default: _ } = await import('./persistence/db'); // ensure jobDocToScoredJob is available
     jobs = docs.map((d: any) => ({
       id: d.externalId,
       title: d.title,

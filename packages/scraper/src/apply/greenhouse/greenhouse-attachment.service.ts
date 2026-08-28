@@ -79,8 +79,12 @@ export class GreenhouseAttachmentService {
         (el: Element) =>
           el.closest('.field, .upload-field, [class*="field"]') || el.parentElement?.parentElement,
       );
-      if (parent) {
-        coverLetterTextarea = await parent.$('textarea');
+      // evaluateHandle always returns a handle, even when the expression produced
+      // null — so `if (parent)` proved nothing. asElement() is both the real
+      // emptiness check and the way to get something queryable.
+      const parentEl = parent.asElement();
+      if (parentEl) {
+        coverLetterTextarea = await parentEl.$('textarea');
       }
     }
 
