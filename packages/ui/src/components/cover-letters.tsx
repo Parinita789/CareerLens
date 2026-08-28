@@ -276,7 +276,6 @@ export function CoverLettersPage({ jobs, onRefresh }: CoverLettersPageProps) {
               <h3>Job description</h3>
               <textarea
                 className="cl-edit-textarea"
-                style={{ minHeight: '220px' }}
                 value={pasteDescription}
                 onChange={(e) => setPasteDescription(e.target.value)}
                 placeholder="Paste the full job description here..."

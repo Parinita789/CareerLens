@@ -2057,12 +2057,18 @@ h1 {
 }
 
 .cl-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* min-width:0 lets the input shrink inside the flex row; without it the
+   intrinsic input width wins and pushes + New out of the panel. */
 .cl-search-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 9px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2076,6 +2082,100 @@ h1 {
 .cl-search-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Was never styled, so it rendered as a default browser button wrapped onto
+   its own line under the full-width search box. */
+.cl-new-btn {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cl-new-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* Also never styled. An unstyled textarea falls back to the browser default of
+   roughly twenty columns and two rows, which is why both the editor and the
+   paste-a-description box came out cramped. */
+.cl-edit-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 320px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cl-edit-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.cl-edit-textarea::placeholder { color: var(--text-dim, #94a3b8); }
+
+/* Matches its neighbour .cl-copy-btn — it sat unstyled beside it, rendering as
+   a default browser button in the middle of the styled header. */
+.cl-edit-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.cl-edit-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cl-edit-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Also used for the modal's Cancel/Generate pair, which had no row styling and
+   only held together because buttons happen to be inline. */
+.cl-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* A pasted job description is long. Scale with the viewport instead of a fixed
+   height, but stay inside the modal's own 85vh cap so the Generate button is
+   never pushed out of reach. */
+.modal-section .cl-edit-textarea {
+  min-height: clamp(240px, 44vh, 520px);
 }
 
 .cl-list {
