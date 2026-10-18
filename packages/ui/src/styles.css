@@ -224,6 +224,104 @@ h1 {
 
 .tab-spacer { flex: 1; }
 
+/* ── Home cards ─────────────────────────────────────────────────── */
+
+.home-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 18px;
+}
+.home-header h2 { margin: 0; font-size: 20px; font-weight: 600; color: var(--text); }
+.home-header p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.home-card {
+  --card-accent: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--card-accent);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.home-card:hover {
+  transform: translateY(-2px);
+  background: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+  border-color: var(--card-accent);
+}
+.home-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
+
+.home-card-queue { --card-accent: var(--accent); }
+.home-card-prepare { --card-accent: var(--blue); }
+.home-card-applied { --card-accent: var(--blue); }
+.home-card-interviewing { --card-accent: var(--yellow); }
+.home-card-accepted { --card-accent: var(--green); }
+.home-card-rejected { --card-accent: var(--red); }
+.home-card-cover-letters { --card-accent: var(--accent-hover); }
+.home-card-applications { --card-accent: var(--orange); }
+
+.home-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.home-card-icon { font-size: 22px; }
+.home-card-count { font-size: 28px; font-weight: 700; color: var(--card-accent); font-variant-numeric: tabular-nums; }
+.home-card-label { font-size: 15px; font-weight: 600; }
+.home-card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.4; }
+.home-card-flag {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--orange-dim);
+  color: var(--orange);
+  font-size: 11px;
+  font-weight: 600;
+}
+.home-card-open { margin-top: auto; padding-top: 8px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.home-card:hover .home-card-open { color: var(--card-accent); }
+
+/* ── In-tab nav (back to home + all-tabs toggle) ────────────────── */
+
+.view-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.view-title { margin: 0 4px; font-size: 18px; font-weight: 600; color: var(--text); }
+
+.home-back-btn,
+.all-tabs-toggle {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.home-back-btn:hover,
+.all-tabs-toggle:hover { background: var(--bg-hover); color: var(--text); }
+.all-tabs-toggle.on { background: var(--accent-glow); border-color: var(--accent); color: var(--accent-hover); }
+
+.tab-bar { flex-wrap: wrap; }
+
 .pipeline-btn {
   padding: 8px 20px;
   border: none;

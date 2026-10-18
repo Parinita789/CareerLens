@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import type { ScoredJob, ApplicationTask } from '../types';
-import { TabBar } from './tab-bar';
+import { TabBar, HomeCards, tabList } from './tab-bar';
 import { ApplicationsView } from './applications-view';
 import { countTasks } from './application-history';
 import { JobTable } from './job-table';
@@ -55,6 +55,14 @@ export const ACCEPTED_OUTCOMES = [
 
 export function App() {
   const [activeTab, setActiveTab] = useState<Tab>('queue');
+  // Home shows one card per tab; a tab's contents only render once it's opened.
+  const [onHome, setOnHome] = useState(true);
+  // The full row of tabs stays hidden inside a tab until asked for.
+  const [showAllTabs, setShowAllTabs] = useState(false);
+  const openTab = useCallback((tab: Tab) => {
+    setActiveTab(tab);
+    setOnHome(false);
+  }, []);
   const [jobs, setJobs] = useState<ScoredJob[]>([]);
   const [coverLetterJobs, setCoverLetterJobs] = useState<CoverLetterJob[]>([]);
   const [prepareJobs, setPrepareJobs] = useState<any[]>([]);
@@ -363,11 +371,22 @@ export function App() {
       )
     : byNew;
 
+  const tabCounts = {
+    queue: queue.length,
+    applied: applied.length,
+    interviewing: interviewing.length,
+    accepted: accepted.length,
+    rejected: rejected.length,
+    coverLetters: coverLetterJobs.length,
+    prepare: prepareJobs.filter((p: any) => p.status !== 'applied').length,
+    applications: taskCounts.attention,
+  };
+
   if (loading) {
     return (
       <div className="container">
         <div className="app-header">
-          <h1>JobPilot</h1>
+          <h1>CareerLens</h1>
         </div>
         <div className="empty-state">
           <p>Loading...</p>
@@ -379,7 +398,7 @@ export function App() {
   return (
     <div className="container">
       <div className="app-header">
-        <h1>JobPilot</h1>
+        <h1>CareerLens</h1>
         <label
           className={`auto-submit-toggle ${allowAutoSubmit ? 'on' : 'off'}`}
           title={
@@ -441,160 +460,199 @@ export function App() {
           )}
         </div>
       </div>
-      <TabBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        counts={{
-          queue: queue.length,
-          applied: applied.length,
-          interviewing: interviewing.length,
-          accepted: accepted.length,
-          rejected: rejected.length,
-          coverLetters: coverLetterJobs.length,
-          prepare: prepareJobs.filter((p: any) => p.status !== 'applied').length,
-          applications: taskCounts.attention,
-        }}
-        applicationsNeedReview={taskCounts.needsReview}
-        onOpenCommands={() => setCommandPanelOpen(true)}
-        onOpenKeywords={() => setKeywordManagerOpen(true)}
-      />
-
-      {activeTab !== 'cover-letters' && activeTab !== 'prepare' && activeTab !== 'applications' && (
+      {onHome ? (
         <>
-          <div className="filter-row">
-            <div className="search-filter">
-              <input
-                className="search-input"
-                placeholder="Search company or title..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button className="search-clear" onClick={() => setSearchQuery('')}>
-                  &times;
-                </button>
-              )}
+          <div className="home-header">
+            <div>
+              <h2>Where to?</h2>
+              <p>Pick a section to see its details.</p>
             </div>
-            <div className="platform-filter">
-              {(
-                ['all', 'linkedin', 'greenhouse', 'ashby', 'lever', 'indeed'] as PlatformFilter[]
-              ).map((p) => (
-                <button
-                  key={p}
-                  className={`filter-btn ${platformFilter === p ? 'active' : ''}`}
-                  onClick={() => setPlatformFilter(p)}
-                >
-                  {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </div>
-            <button
-              className={`filter-btn ${newOnlyFilter ? 'active' : ''}`}
-              onClick={() => setNewOnlyFilter(!newOnlyFilter)}
-              style={{ fontWeight: newOnlyFilter ? 600 : 400 }}
-            >
-              New (24h)
+            <div className="tab-spacer" />
+            <button className="pipeline-btn keywords-btn" onClick={() => setKeywordManagerOpen(true)}>
+              Keywords
             </button>
-            <div className="score-filter">
-              <span className="score-filter-label">Score:</span>
-              {[0, 5, 6, 7, 8, 9].map((s) => (
-                <button
-                  key={s}
-                  className={`filter-btn ${scoreFilter === s ? 'active' : ''}`}
-                  onClick={() => setScoreFilter(s)}
-                >
-                  {s === 0 ? 'All' : s}
-                </button>
-              ))}
-            </div>
-            <div className="sort-filter">
-              <span className="score-filter-label">Sort:</span>
-              <select
-                className="sort-select"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortBy)}
-                title="How to order jobs in the table"
-              >
-                <option value="default">Default (new, then score)</option>
-                <option value="posted-new">Posted: newest first</option>
-                <option value="posted-old">Posted: oldest first</option>
-                <option value="scraped-new">Scraped: newest first</option>
-                <option value="scraped-old">Scraped: oldest first</option>
-                <option value="score-high">Score: high to low</option>
-                <option value="score-low">Score: low to high</option>
-              </select>
-            </div>
-            {activeTab === 'queue' && !autoApplyMode && (
-              <button className="select-to-apply-btn" onClick={() => setAutoApplyMode(true)}>
-                Select to Auto Apply
-              </button>
-            )}
-            {activeTab === 'applied' && (
-              <button className="select-to-apply-btn" onClick={() => setAddJobMode('applied')}>
-                + Add Job
-              </button>
-            )}
-            {activeTab === 'accepted' && (
-              <button className="select-to-apply-btn" onClick={() => setAddJobMode('accepted')}>
-                + Add Job
-              </button>
-            )}
-            {activeTab === 'interviewing' && (
-              <button className="select-to-apply-btn" onClick={() => setAddJobMode('interviewing')}>
-                + Add Interview
-              </button>
-            )}
+            <button className="pipeline-btn" onClick={() => setCommandPanelOpen(true)}>
+              Commands
+            </button>
           </div>
-          <JobTable
-            jobs={tabJobs}
-            activeTab={activeTab}
-            selectMode={autoApplyMode}
-            sortBy={sortBy}
-            trackedStatusByRole={trackedStatusByRole}
-            onSelectJob={setSelectedJob}
-            onDismissJob={handleDismissJob}
-            onMarkApplied={handleMarkApplied}
-            onUpdateStatus={handleUpdateStatus}
-            onAutoApply={(ids) => {
-              handleAutoApply(ids);
-              setAutoApplyMode(false);
-            }}
-            onCancelSelect={() => setAutoApplyMode(false)}
-            taskByJobId={taskByJobId}
-            onRetryTask={handleRetryTask}
+          <HomeCards
+            counts={tabCounts}
+            applicationsNeedReview={taskCounts.needsReview}
+            onOpen={openTab}
           />
         </>
-      )}
+      ) : (
+        <>
+          <div className="view-nav">
+            <button className="home-back-btn" onClick={() => setOnHome(true)}>
+              ← Home
+            </button>
+            <h2 className="view-title">
+              {tabList(tabCounts).find((t) => t.key === activeTab)?.label}
+            </h2>
+            <button
+              className={`all-tabs-toggle ${showAllTabs ? 'on' : ''}`}
+              aria-expanded={showAllTabs}
+              onClick={() => setShowAllTabs((v) => !v)}
+            >
+              {showAllTabs ? 'Hide all tabs' : 'Show all tabs'}
+            </button>
+            <div className="tab-spacer" />
+            <button className="pipeline-btn keywords-btn" onClick={() => setKeywordManagerOpen(true)}>
+              Keywords
+            </button>
+            <button className="pipeline-btn" onClick={() => setCommandPanelOpen(true)}>
+              Commands
+            </button>
+          </div>
+          {showAllTabs && (
+            <TabBar
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              counts={tabCounts}
+              applicationsNeedReview={taskCounts.needsReview}
+            />
+          )}
 
-      {activeTab === 'applications' && (
-        <ApplicationsView
-          tasks={applicationTasks}
-          onRetryTask={handleRetryTask}
-          onCancelTask={handleCancelTask}
-        />
-      )}
 
-      {activeTab === 'prepare' && (
-        <PrepareReview
-          jobs={prepareJobs}
-          onRefresh={fetchPrepareJobs}
-          onAutoApply={handleAutoApply}
-          onDismissJob={async (jobId) => {
-            try {
-              await axios.patch(`/api/jobs/${jobId}/status`, {
-                status: 'rejected',
-                reason: 'Removed from prepare list',
-              });
-              fetchJobs();
-            } catch {
-              /* ignore */
-            }
-          }}
-        />
-      )}
+          {activeTab !== 'cover-letters' && activeTab !== 'prepare' && activeTab !== 'applications' && (
+            <>
+              <div className="filter-row">
+                <div className="search-filter">
+                  <input
+                    className="search-input"
+                    placeholder="Search company or title..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button className="search-clear" onClick={() => setSearchQuery('')}>
+                      &times;
+                    </button>
+                  )}
+                </div>
+                <div className="platform-filter">
+                  {(
+                    ['all', 'linkedin', 'greenhouse', 'ashby', 'lever', 'indeed'] as PlatformFilter[]
+                  ).map((p) => (
+                    <button
+                      key={p}
+                      className={`filter-btn ${platformFilter === p ? 'active' : ''}`}
+                      onClick={() => setPlatformFilter(p)}
+                    >
+                      {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className={`filter-btn ${newOnlyFilter ? 'active' : ''}`}
+                  onClick={() => setNewOnlyFilter(!newOnlyFilter)}
+                  style={{ fontWeight: newOnlyFilter ? 600 : 400 }}
+                >
+                  New (24h)
+                </button>
+                <div className="score-filter">
+                  <span className="score-filter-label">Score:</span>
+                  {[0, 5, 6, 7, 8, 9].map((s) => (
+                    <button
+                      key={s}
+                      className={`filter-btn ${scoreFilter === s ? 'active' : ''}`}
+                      onClick={() => setScoreFilter(s)}
+                    >
+                      {s === 0 ? 'All' : s}
+                    </button>
+                  ))}
+                </div>
+                <div className="sort-filter">
+                  <span className="score-filter-label">Sort:</span>
+                  <select
+                    className="sort-select"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortBy)}
+                    title="How to order jobs in the table"
+                  >
+                    <option value="default">Default (new, then score)</option>
+                    <option value="posted-new">Posted: newest first</option>
+                    <option value="posted-old">Posted: oldest first</option>
+                    <option value="scraped-new">Scraped: newest first</option>
+                    <option value="scraped-old">Scraped: oldest first</option>
+                    <option value="score-high">Score: high to low</option>
+                    <option value="score-low">Score: low to high</option>
+                  </select>
+                </div>
+                {activeTab === 'queue' && !autoApplyMode && (
+                  <button className="select-to-apply-btn" onClick={() => setAutoApplyMode(true)}>
+                    Select to Auto Apply
+                  </button>
+                )}
+                {activeTab === 'applied' && (
+                  <button className="select-to-apply-btn" onClick={() => setAddJobMode('applied')}>
+                    + Add Job
+                  </button>
+                )}
+                {activeTab === 'accepted' && (
+                  <button className="select-to-apply-btn" onClick={() => setAddJobMode('accepted')}>
+                    + Add Job
+                  </button>
+                )}
+                {activeTab === 'interviewing' && (
+                  <button className="select-to-apply-btn" onClick={() => setAddJobMode('interviewing')}>
+                    + Add Interview
+                  </button>
+                )}
+              </div>
+              <JobTable
+                jobs={tabJobs}
+                activeTab={activeTab}
+                selectMode={autoApplyMode}
+                sortBy={sortBy}
+                trackedStatusByRole={trackedStatusByRole}
+                onSelectJob={setSelectedJob}
+                onDismissJob={handleDismissJob}
+                onMarkApplied={handleMarkApplied}
+                onUpdateStatus={handleUpdateStatus}
+                onAutoApply={(ids) => {
+                  handleAutoApply(ids);
+                  setAutoApplyMode(false);
+                }}
+                onCancelSelect={() => setAutoApplyMode(false)}
+                taskByJobId={taskByJobId}
+                onRetryTask={handleRetryTask}
+              />
+            </>
+          )}
 
-      {activeTab === 'cover-letters' && (
-        <CoverLettersPage jobs={coverLetterJobs} onRefresh={fetchCoverLetters} />
+          {activeTab === 'applications' && (
+            <ApplicationsView
+              tasks={applicationTasks}
+              onRetryTask={handleRetryTask}
+              onCancelTask={handleCancelTask}
+            />
+          )}
+
+          {activeTab === 'prepare' && (
+            <PrepareReview
+              jobs={prepareJobs}
+              onRefresh={fetchPrepareJobs}
+              onAutoApply={handleAutoApply}
+              onDismissJob={async (jobId) => {
+                try {
+                  await axios.patch(`/api/jobs/${jobId}/status`, {
+                    status: 'rejected',
+                    reason: 'Removed from prepare list',
+                  });
+                  fetchJobs();
+                } catch {
+                  /* ignore */
+                }
+              }}
+            />
+          )}
+
+          {activeTab === 'cover-letters' && (
+            <CoverLettersPage jobs={coverLetterJobs} onRefresh={fetchCoverLetters} />
+          )}
+        </>
       )}
 
       {selectedJob && (
