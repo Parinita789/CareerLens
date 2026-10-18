@@ -3,7 +3,7 @@ import { chromium, type BrowserContext } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { ApplicationFieldsModel } from '@job-agent/shared';
+import { ApplicationFieldsModel } from '@careerlens/shared';
 import { TARGET_COMPANIES } from '../common/company-directory';
 import { LinkedInProbeService } from './linkedin-probe.service';
 import type { ScoredJob } from '../types';

@@ -1,4 +1,4 @@
-import { llmChat } from '@job-agent/shared';
+import { llmChat } from '@careerlens/shared';
 
 export interface JudgeRubric {
   minScore?: number;

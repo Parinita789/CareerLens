@@ -46,9 +46,9 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('JobPilot API')
+    .setTitle('CareerLens API')
     .setDescription(
-      'REST API consumed by the JobPilot frontend (packages/ui) — job tracking, cover ' +
+      'REST API consumed by the CareerLens frontend (packages/ui) — job tracking, cover ' +
         'letters, the scrape/apply pipeline, application form answers, and candidate profile.',
     )
     .setVersion('1.0')

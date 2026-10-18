@@ -1,6 +1,6 @@
 import { Controller, Get, Put, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
-import { UserModel } from '@job-agent/shared';
+import { UserModel } from '@careerlens/shared';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 
 // Global settings — one user, one document. These are master toggles that the

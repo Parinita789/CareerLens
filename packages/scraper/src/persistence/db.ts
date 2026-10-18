@@ -1,7 +1,7 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { connectToDatabase, disconnectDatabase, JobModel, CoverLetterModel, UserModel, QuestionAnswerModel, ProfileAnswerModel } from '@job-agent/shared';
+import { connectToDatabase, disconnectDatabase, JobModel, CoverLetterModel, UserModel, QuestionAnswerModel, ProfileAnswerModel } from '@careerlens/shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });

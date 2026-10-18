@@ -35,7 +35,7 @@
         "location": "San Francisco, CA",
         "description": "Build LLM-powered agentic workflows using Claude API. Design prompt-engineering patterns, multi-step tool use, and evaluation harnesses for agent reliability.",
         "matched_skills": ["Claude API", "Prompt Engineering", "LLM integration", "TypeScript"],
-        "reason": "AI role — swap primary achievement to the JobPilot AI agent work"
+        "reason": "AI role — swap primary achievement to the CareerLens AI agent work"
       },
       "expect": {
         "minLength": 400,

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { QuestionAnswerModel, ProfileAnswerModel } from '@job-agent/shared';
+import { QuestionAnswerModel, ProfileAnswerModel } from '@careerlens/shared';
 import { randomUUID } from 'crypto';
 
 export interface PendingQuestion {

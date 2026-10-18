@@ -1,6 +1,8 @@
-# JobPilot
+# CareerLens
 
-A local AI job-search pipeline I built and use to manage my own search. Scrapes 200+ listings/day across LinkedIn, Greenhouse, Lever, Indeed, Ashby, and Gmail-IMAP alerts. A two-layer deterministic prefilter eliminates most jobs before any LLM call; survivors get scored 1–10 with matched/missing skills, cover letters, and pre-scraped application forms. Optional auto-apply for LinkedIn Easy Apply and Greenhouse/Ashby — gated behind a dry-run safety toggle by default.
+**Human-in-the-loop: nothing submits without my review.** CareerLens finds, ranks, and prepares applications; I decide what goes out. Every form answer is shown in the Prepare tab for review and editing before anything is filled, and the Submit click is disabled by default — the bot fills the form and stops so I can check it.
+
+A local AI job-search pipeline I built and use to manage my own search. Scrapes 200+ listings/day across LinkedIn, Greenhouse, Lever, Indeed, Ashby, and Gmail-IMAP alerts. A two-layer deterministic prefilter eliminates most jobs before any LLM call; survivors get scored 1–10 with matched/missing skills, cover letters, and pre-scraped application forms for review.
 
 Everything runs locally via `npm run api` + `npm run ui`. Single monorepo, no cloud services beyond MongoDB.
 
@@ -12,11 +14,11 @@ Everything runs locally via `npm run api` + `npm run ui`. Single monorepo, no cl
 
 Every form question flows through a layered resolver. The LLM only fires when everything deterministic misses.
 
-| Priority | Source                  | Notes |
-| -------- | ----------------------- | ----- |
-| 1        | **Pre-scraped answers** | Reviewed in Prepare tab, stored in `applicationFields` |
-| 2        | **Saved rules**         | `ProfileAnswer` collection — user corrections + demographic rules + seed defaults |
-| 3        | **Profile defaults**    | Identity / demographics from `UserModel` (name, phone, gender, pronouns, etc.) |
+| Priority | Source                  | Notes                                                                                      |
+| -------- | ----------------------- | ------------------------------------------------------------------------------------------ |
+| 1        | **Pre-scraped answers** | Reviewed in Prepare tab, stored in `applicationFields`                                     |
+| 2        | **Saved rules**         | `ProfileAnswer` collection — user corrections + demographic rules + seed defaults          |
+| 3        | **Profile defaults**    | Identity / demographics from `UserModel` (name, phone, gender, pronouns, etc.)             |
 | 4        | **LLM fallback**        | Receives demographics + ALL saved rules as context, so paraphrases still resolve correctly |
 
 The LLM prompt for questions always includes a **Candidate demographics** block and a **Saved answers** list — even when a paraphrase misses the rule regex, the LLM sees ground truth and can't fabricate.
@@ -47,13 +49,13 @@ Persisted in `UserModel.settings.allowAutoSubmit` via `GET`/`PUT /api/settings`.
 
 Four regression harnesses + 132 unit tests. The harnesses call real LLM paths with frozen fixtures and grade the output. Run on demand, not from `npm test`.
 
-| Command                        | Target                               | Fixture |
-| ------------------------------ | ------------------------------------ | ------- |
-| `npm run eval:answers`         | `answerQuestion` (form Q&A)          | 45 cases |
+| Command                        | Target                               | Fixture                                               |
+| ------------------------------ | ------------------------------------ | ----------------------------------------------------- |
+| `npm run eval:answers`         | `answerQuestion` (form Q&A)          | 45 cases                                              |
 | `npm run eval:cover-letters`   | `generateCoverLetter`                | 4 cases (programmatic + LLM-as-judge on 5 dimensions) |
-| `npm run eval:form-pre-answer` | `preAnswerFields` (bulk form filler) | 15 field assertions — grades value AND source |
+| `npm run eval:form-pre-answer` | `preAnswerFields` (bulk form filler) | 15 field assertions — grades value AND source         |
 | `npm run eval:scorer`          | `scoreFitWithLLM`                    | 5 cases — drops fabricated `matched_skills` not in JD |
-| `npm run eval:all`             | all four in sequence                 | ~3.5 min total; exits non-zero on any failure |
+| `npm run eval:all`             | all four in sequence                 | ~3.5 min total; exits non-zero on any failure         |
 
 **Programmatic graders** — predicates in `_lib.ts`: `equals`, `includes`, `oneOf`, `notIncludes`, `regex`, `minLength`, `maxLength`, plus numeric-range and array-inclusion helpers for the scorer harness.
 
@@ -91,14 +93,14 @@ Consolidated on `claude-sonnet-4-6` everywhere — the unified `llmChat()` call 
 
 Deterministic matching of short rule-answers onto long-form dropdown options — handled by `smartMatchOption` so dropdowns don't need an LLM call.
 
-| Rule answer       | Dropdown options                                           | Match method |
-| ----------------- | ---------------------------------------------------------- | ------------ |
-| `"United States"` | `"US"`, `"USA"`, `"United States of America"`              | Country aliases |
+| Rule answer       | Dropdown options                                           | Match method                             |
+| ----------------- | ---------------------------------------------------------- | ---------------------------------------- |
+| `"United States"` | `"US"`, `"USA"`, `"United States of America"`              | Country aliases                          |
 | `"Yes"` / `"No"`  | `"Yes, I am authorized..."`, `"No, I will not require..."` | Starts-with + positive/negative phrasing |
-| `"Female"`        | `"Female"`, `"Woman"`, `"Female (she/her)"`                | Gender aliases |
+| `"Female"`        | `"Female"`, `"Woman"`, `"Female (she/her)"`                | Gender aliases                           |
 | `"Asian"`         | `"South Asian (inclusive of...)"`, `"Asian"`               | Prefers South Asian, falls back to Asian |
-| `"Heterosexual"`  | `"Straight"`, `"Cisgender"`                                | Sexual orientation aliases |
-| `"No"` (veteran)  | `"I am not a protected veteran"`                           | Label-aware negative matching |
+| `"Heterosexual"`  | `"Straight"`, `"Cisgender"`                                | Sexual orientation aliases               |
+| `"No"` (veteran)  | `"I am not a protected veteran"`                           | Label-aware negative matching            |
 
 ---
 
@@ -130,11 +132,11 @@ packages/
 
 Selectable from the dashboard's Pipeline modal, or runnable individually via npm scripts.
 
-| Phase              | What it does |
-| ------------------ | ------------ |
-| **Scrape & Score** | Scrapes Ashby, Greenhouse, LinkedIn (8 queries + alerts), Lever. Two-layer filter + LLM scoring per company/query. Jobs scoring 7+ get their forms pre-scraped automatically. |
-| **Gmail Alerts**   | Polls Gmail IMAP for today's LinkedIn alert emails. Parses job URLs, scrapes each posting, scores per alert keyword. |
-| **Cover Letters**  | LLM-generated 3-paragraph cover letters for `to_apply` jobs. Runs in-process from the API; no subprocess spawn. |
+| Phase              | What it does                                                                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Scrape & Score** | Scrapes Ashby, Greenhouse, LinkedIn (8 queries + alerts), Lever. Two-layer filter + LLM scoring per company/query. Jobs scoring 7+ get their forms pre-scraped automatically.        |
+| **Gmail Alerts**   | Polls Gmail IMAP for today's LinkedIn alert emails. Parses job URLs, scrapes each posting, scores per alert keyword.                                                                 |
+| **Cover Letters**  | LLM-generated 3-paragraph cover letters for `to_apply` jobs. Runs in-process from the API; no subprocess spawn.                                                                      |
 | **Auto Apply**     | Opens Greenhouse / Ashby / LinkedIn Easy Apply, fills every field from pre-scraped answers + rules + profile (zero LLM calls during fill). Submit click gated on a global UI toggle. |
 
 ---
@@ -168,7 +170,7 @@ LinkedIn `/jobs/view/...` URLs are postings, not forms. The `probeLinkedInApplyT
 
 ## Dashboard
 
-- **Tabs** — Queue, Prepare, Applied, Interviewing, Accepted, Declined, Rejected, Cover Letters
+- **Home** — one card per section (Queue, Prepare, Applied, Interviewing, Application Accepted, Application Filtered, Cover Letters, Applications) with live counts; a section's details open on click, and a "Show all tabs" toggle reveals the full tab row for quick switching
 - **Filters** — Search (company/title), Platform, Score (5-9), "New only" (last 24h)
 - **Sort** — by posted date, scrape date, or fit score; default = "new in last 24h first, then by score"
 - **Scraped date column** on every tab — relative time (`3d ago`, `2w ago`), hover for full timestamp
@@ -176,7 +178,7 @@ LinkedIn `/jobs/view/...` URLs are postings, not forms. The `probeLinkedInApplyT
 - **Status dropdowns**:
   - Applied tab → Waiting / Interviewing / Accepted / Declined / No Response
   - **Interviewing tab** → Round dropdown (Recruiter, Hiring Manager, Coding, System Design, Behavioral, Onsite, Offer, Other) + Outcome status
-  - **Accepted tab** → Outcome dropdown (Pending / Offer Received / Offer Accepted / Offer Declined / Withdrew / Position Closed / Ghosted)
+  - **Application Accepted tab** → Outcome dropdown (Pending / Offer Received / Offer Accepted / Offer Declined / Withdrew / Position Closed / Ghosted)
 - **+ Add Job / + Add Interview** — manual entry directly into Applied / Interviewing / Accepted
 - **Header** — Auto-submit pill (ON green / OFF red), hamburger menu
 - **Hamburger** — Candidate Profile, Saved Rules, Keywords, Pipeline
@@ -198,7 +200,7 @@ Greenhouse forms always have a phone country code picker in the DOM. A generic `
 
 `linkedin-session.json` for scraping (test account), `linkedin-session-apply.json` for applying (real account). Prevents bulk-scrape rate limiting from burning the account used to submit.
 
-### Cover letter generation lives in `@job-agent/shared`
+### Cover letter generation lives in `@careerlens/shared`
 
 Used to spawn `npx tsx generate-one-cover-letter.ts` per call (~5s overhead). Now imported
 in-process by the API. Two sequential LLM calls per letter: a draft (voice exemplars from
@@ -214,12 +216,10 @@ anti-AI-tell rules.
 
 Jobs older than 10 days (by source-provided `posted_at`) are dropped before scoring. Stale roles are usually filled; LLM budget would be wasted.
 
-### Anti-detection
+### Browser sessions
 
-- Full-screen Chrome with realistic fingerprint (plugins, hardware, geolocation, screen)
-- `navigator.webdriver` set to `undefined`
-- Cookie persistence between runs
-- LinkedIn login uses 5-minute manual-login polling, waits for the `li_at` auth cookie rather than URL patterns (catches SSO / checkpoint / email-verification flows correctly)
+- Cookie persistence between runs, so I log in once rather than every session
+- LinkedIn login is manual: the bot waits up to 5 minutes for me to sign in, detecting completion via the auth cookie rather than URL patterns (handles SSO, checkpoint, and email-verification flows)
 
 ---
 
@@ -227,29 +227,29 @@ Jobs older than 10 days (by source-provided `posted_at`) are dropped before scor
 
 - **Language** — TypeScript across the monorepo (npm workspaces)
 - **Scraping** — Playwright (Chrome). Non-headless for interactive LinkedIn login + apply; headless for API-board scrapes and Gmail URL scrapes
-- **LLM** — Claude CLI (default) or Anthropic SDK, switchable via `LLM_PROVIDER` env. All consumers call `llmChat()` from `@job-agent/shared` — scoring, cover letters, form Q&A, resume parsing all switch together
+- **LLM** — Claude CLI (default) or Anthropic SDK, switchable via `LLM_PROVIDER` env. All consumers call `llmChat()` from `@careerlens/shared` — scoring, cover letters, form Q&A, resume parsing all switch together
 - **Backend** — NestJS on Node.js
 - **Frontend** — React 18, Vite
 - **Database** — MongoDB (Mongoose)
 - **Email** — Gmail IMAP (`imapflow`, `mailparser`)
 
-| Provider     | How                                                     | Notes |
-| ------------ | ------------------------------------------------------- | ----- |
+| Provider     | How                                                     | Notes                                                                     |
+| ------------ | ------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `claude-cli` | Spawns `claude -p --model claude-sonnet-4-6` subprocess | Uses your Claude CLI subscription. Subprocess startup adds ~2-5s per call |
-| `anthropic`  | Direct Anthropic SDK with `claude-sonnet-4-6`           | Fastest per-call (~5–10s). Requires `ANTHROPIC_API_KEY` |
+| `anthropic`  | Direct Anthropic SDK with `claude-sonnet-4-6`           | Fastest per-call (~5–10s). Requires `ANTHROPIC_API_KEY`                   |
 
 ---
 
 ## Database collections
 
-| Collection          | Purpose |
-| ------------------- | ------- |
+| Collection          | Purpose                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------- |
 | `jobs`              | All scraped jobs with scores, status, applied_at, interview_round, accepted_outcome |
-| `coverletters`      | Generated cover letters keyed by externalJobId |
-| `users`             | Candidate profile — one document. Includes `demographics` and `settings` |
-| `profileanswers`    | Reusable form answer rules (question_pattern → answer) |
-| `questionanswers`   | Per-job Q&A logs from auto-apply runs |
-| `applicationfields` | Pre-scraped form fields with answers per job |
+| `coverletters`      | Generated cover letters keyed by externalJobId                                      |
+| `users`             | Candidate profile — one document. Includes `demographics` and `settings`            |
+| `profileanswers`    | Reusable form answer rules (question_pattern → answer)                              |
+| `questionanswers`   | Per-job Q&A logs from auto-apply runs                                               |
+| `applicationfields` | Pre-scraped form fields with answers per job                                        |
 
 ---
 
@@ -271,7 +271,7 @@ Create `.env` at the repo root:
 
 ```
 MONGO_URI=mongodb://localhost:27017/job-tracker
-API_PORT=3002
+API_PORT=3000
 LLM_PROVIDER=claude-cli
 ANTHROPIC_API_KEY=
 GMAIL_EMAIL=your-job-alerts@gmail.com

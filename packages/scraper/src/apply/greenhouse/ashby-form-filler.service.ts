@@ -91,7 +91,7 @@ export class AshbyFormFillerService {
     if (clInput) {
       try {
         const { CoverLetterModel } = await import('../../persistence/db');
-        const { ApplicationFieldsModel } = await import('@job-agent/shared');
+        const { ApplicationFieldsModel } = await import('@careerlens/shared');
         let coverLetter = '';
         const preFilled = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
           .lean()

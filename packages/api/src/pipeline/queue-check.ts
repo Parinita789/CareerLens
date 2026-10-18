@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../../.env') });
-import { connectToDatabase, disconnectDatabase, ApplicationTaskModel } from '@job-agent/shared';
+import { connectToDatabase, disconnectDatabase, ApplicationTaskModel } from '@careerlens/shared';
 import { ApplicationTaskService } from './application-task.service';
 import { PipelineService } from './pipeline.service';
 
@@ -162,7 +162,7 @@ async function entryPointChecks(svc: ApplicationTaskService) {
 
   // The live auto-submit toggle must win over the value stored at enqueue.
   spawned = [];
-  const { UserModel } = await import('@job-agent/shared');
+  const { UserModel } = await import('@careerlens/shared');
   const user: any = await UserModel.findOne().lean();
   const allowNow = user?.settings?.allowAutoSubmit === true;
   await svc.enqueue([P + 'e5'], true);

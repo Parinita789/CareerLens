@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { JobModel, CoverLetterModel, generateCoverLetter as generateCoverLetterShared } from '@job-agent/shared';
+import { JobModel, CoverLetterModel, generateCoverLetter as generateCoverLetterShared } from '@careerlens/shared';
 
 // Company/title come straight from user input and go into a RegExp, so anything
 // with regex metacharacters ("Yahoo! Inc.", "C++ Engineer") must be neutralised.
@@ -76,7 +76,7 @@ export class JobsService {
 
     // Sync applicationFields — remove from Prepare tab when job status changes
     if (['applied', 'declined', 'rejected'].includes(status)) {
-      const { ApplicationFieldsModel } = await import('@job-agent/shared');
+      const { ApplicationFieldsModel } = await import('@careerlens/shared');
       await ApplicationFieldsModel.deleteOne({ externalJobId: id }).catch(() => {});
     }
 

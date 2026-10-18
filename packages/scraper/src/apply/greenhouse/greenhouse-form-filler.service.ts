@@ -30,7 +30,7 @@ export class GreenhouseFormFillerService {
   const profile = await loadProfile();
 
   // Load pre-scraped answers (from Prepare tab) — use these first, skip LLM calls
-  const { ApplicationFieldsModel } = await import('@job-agent/shared');
+  const { ApplicationFieldsModel } = await import('@careerlens/shared');
   const preScraped = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
     .lean()
     .catch(() => null)) as any;
@@ -605,7 +605,7 @@ export class GreenhouseFormFillerService {
 
       if (isWhyQuestion && coverLetterText) {
         console.log(`    Company-specific question detected: "${label}" — using cover letter`);
-        const { llmChat } = await import('@job-agent/shared');
+        const { llmChat } = await import('@careerlens/shared');
         try {
           const response = await llmChat(
             `Based on this cover letter, write a 2-3 sentence answer to the question: "${label}"\n\nCover letter:\n${coverLetterText}\n\nJob: ${job.title} at ${job.company}\n\nWrite ONLY the answer, no preamble.`,

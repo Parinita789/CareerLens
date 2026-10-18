@@ -54,10 +54,10 @@ export function PendingQuestion() {
         if (data.length > 0 && prevCountRef.current === 0) {
           playNotificationSound();
           // Also update page title to draw attention
-          document.title = '⚠ Bot needs your input — JobPilot';
+          document.title = '⚠ Bot needs your input — CareerLens';
         }
         if (data.length === 0 && prevCountRef.current > 0) {
-          document.title = 'JobPilot';
+          document.title = 'CareerLens';
         }
         prevCountRef.current = data.length;
       } catch {

@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
 import { connectToDatabase, disconnectDatabase } from '../persistence/db';
-import { UserModel, ProfileAnswerModel } from '@job-agent/shared';
+import { UserModel, ProfileAnswerModel } from '@careerlens/shared';
 
 const DEMOGRAPHICS = {
   race: 'Asian',

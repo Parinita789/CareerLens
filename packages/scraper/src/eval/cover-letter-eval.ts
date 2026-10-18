@@ -1,6 +1,6 @@
 // Eval harness for the cover-letter LLM path.
 //   npm run eval:cover-letters
-// Calls the real generateCoverLetter(job) from @job-agent/shared and grades the
+// Calls the real generateCoverLetter(job) from @careerlens/shared and grades the
 // output against a fixture of {job → expectations} pairs.
 
 import * as fs from 'fs';
@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
 import { connectToDatabase, disconnectDatabase } from '../persistence/db';
-import { generateCoverLetter } from '@job-agent/shared';
+import { generateCoverLetter } from '@careerlens/shared';
 import { grade, pad, preview, type Expect } from './_lib';
 import { judgeCoverLetter, type JudgeRubric } from './_judge';
 

@@ -49,7 +49,7 @@ export class GreenhouseAttachmentService {
 
     // Load existing cover letter (pre-scraped or from DB) — avoid regeneration
     let coverLetter = '';
-    const { ApplicationFieldsModel } = await import('@job-agent/shared');
+    const { ApplicationFieldsModel } = await import('@careerlens/shared');
     const preFilled = (await ApplicationFieldsModel.findOne({ externalJobId: job.id })
       .lean()
       .catch(() => null)) as any;

@@ -1,6 +1,6 @@
 import { loadProfile, loadAnswerRules } from '../persistence/db';
-import { llmChat } from '@job-agent/shared';
-import { ProfileAnswerModel } from '@job-agent/shared';
+import { llmChat } from '@careerlens/shared';
+import { ProfileAnswerModel } from '@careerlens/shared';
 import type { ScoredJob } from '../types';
 
 interface ScrapedField {
@@ -353,7 +353,7 @@ export async function preAnswerFields(
     }
 
     // 3. Try LLM for non-dropdown fields
-    const candidateInfo = `Candidate: ${profile?.personal?.name || 'Parinita Kumari'}, Female, located in ${profile?.preferences?.location?.current_city || 'Fremont, CA'}, USA. Backend Engineer, ${profile?.experience?.total_years || 7} years, TypeScript/Node.js. Authorized to work in US, no sponsorship needed. AI/Side project: Built JobPilot (https://github.com/Parinita789/job-agent) — an AI-powered job hunting automation platform using TypeScript, Node.js, Playwright, MongoDB, NestJS, React. Scrapes jobs from LinkedIn/Greenhouse/Ashby, scores with Claude, pre-fills application forms, auto-applies.`;
+    const candidateInfo = `Candidate: ${profile?.personal?.name || 'Parinita Kumari'}, Female, located in ${profile?.preferences?.location?.current_city || 'Fremont, CA'}, USA. Backend Engineer, ${profile?.experience?.total_years || 7} years, TypeScript/Node.js. Authorized to work in US, no sponsorship needed. AI/Side project: Built CareerLens (https://github.com/Parinita789/CareerLens) — an AI-powered job hunting automation platform using TypeScript, Node.js, Playwright, MongoDB, NestJS, React. Scrapes jobs from LinkedIn/Greenhouse/Ashby, scores with Claude, pre-fills application forms, auto-applies.`;
     if (field.type === 'text' || field.type === 'textarea') {
       try {
         const prompt =

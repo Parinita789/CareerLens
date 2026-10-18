@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { llmChatWithRetry } from '@job-agent/shared';
+import { llmChatWithRetry } from '@careerlens/shared';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';

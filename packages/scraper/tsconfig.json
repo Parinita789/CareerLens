@@ -4,7 +4,7 @@
     "outDir": "dist",
     // No rootDir. Nothing is emitted from this package (noEmit below, and every
     // entry point runs through tsx), so rootDir has no output layout to govern —
-    // its only effect was TS6059 on @job-agent/shared, which resolves to
+    // its only effect was TS6059 on @careerlens/shared, which resolves to
     // ../shared/src and therefore sits outside src/ by design.
     //
     // Deliberately NOT switching the path below to ../shared/dist to silence
@@ -18,7 +18,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@job-agent/shared": ["../shared/src/index.ts"]
+      "@careerlens/shared": ["../shared/src/index.ts"]
     }
   },
   "include": ["src/**/*"]

@@ -6,7 +6,7 @@ import { format } from 'node:util';
 import { NestFactory } from '@nestjs/core';
 import { connectToDatabase, disconnectDatabase } from './persistence/db';
 import { TARGET_COMPANIES } from './common/company-directory';
-import { Limiter } from '@job-agent/shared';
+import { Limiter } from '@careerlens/shared';
 import { roleKey } from './common/role-key';
 import { AppModule } from './app.module';
 import { DealBreakerService } from './scoring/deal-breakers.service';
@@ -139,7 +139,10 @@ async function loadJobs(persistence: ScraperPersistenceService): Promise<ScoredJ
   return persistence.loadExistingJobs();
 }
 
-async function persistJobs(jobs: ScoredJob[], persistence: ScraperPersistenceService): Promise<void> {
+async function persistJobs(
+  jobs: ScoredJob[],
+  persistence: ScraperPersistenceService,
+): Promise<void> {
   await persistence.saveJobs(jobs);
 }
 
@@ -294,9 +297,7 @@ async function dedupFilterScore(
   if (highScoreJobs.length > 0) {
     try {
       console.log(`\n  Pre-scraping forms for ${highScoreJobs.length} high-score jobs...`);
-      await formScrapeLimiter.run(() =>
-        services.formScraper.scrapeApplicationForms(highScoreJobs),
-      );
+      await formScrapeLimiter.run(() => services.formScraper.scrapeApplicationForms(highScoreJobs));
     } catch (err) {
       console.error(`  Form pre-scrape failed: ${(err as Error).message}`);
     }
@@ -452,7 +453,6 @@ const SOURCE_RUNNERS: Record<Source, (ctx: SourceContext) => Promise<void>> = {
   indeed: runIndeed,
 };
 
-
 async function main() {
   installSourceTaggedLogging();
 
@@ -537,7 +537,6 @@ async function main() {
     }
   });
   console.log(`\nAll sources finished in ${Math.round((Date.now() - startedAt) / 1000)}s`);
-
 
   // ── Final summary ──
   const allJobs = await loadJobs(services.persistence);

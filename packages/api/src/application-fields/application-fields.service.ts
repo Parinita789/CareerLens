@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ApplicationFieldsModel, ProfileAnswerModel } from '@job-agent/shared';
+import { ApplicationFieldsModel, ProfileAnswerModel } from '@careerlens/shared';
 
 @Injectable()
 export class ApplicationFieldsService {

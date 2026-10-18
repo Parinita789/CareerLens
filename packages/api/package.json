@@ -1,5 +1,5 @@
 {
-  "name": "@job-agent/api",
+  "name": "@careerlens/api",
   "version": "1.0.0",
   "scripts": {
     "start:dev": "nest start --watch",
@@ -8,7 +8,7 @@
     "queue:check": "tsx src/pipeline/queue-check.ts"
   },
   "dependencies": {
-    "@job-agent/shared": "*",
+    "@careerlens/shared": "*",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",
     "@nestjs/core": "^10.0.0",

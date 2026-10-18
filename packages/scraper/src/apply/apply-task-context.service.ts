@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ApplicationTaskModel } from '@job-agent/shared';
+import { ApplicationTaskModel } from '@careerlens/shared';
 
 /**
  * Links this worker process to the ApplicationTask row it is executing.

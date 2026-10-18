@@ -7,7 +7,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@job-agent/shared": ["../shared/dist/index"]
+      "@careerlens/shared": ["../shared/dist/index"]
     }
   },
   "include": ["src/**/*"]

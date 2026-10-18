@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, type OnModuleInit } from '@nestjs/common';
 import { spawn, type ChildProcess } from 'child_process';
 import * as path from 'path';
-import { UserModel, Limiter } from '@job-agent/shared';
+import { UserModel, Limiter } from '@careerlens/shared';
 import { ApplicationTaskService } from './application-task.service';
 
 // Read the global "allow bot to submit" toggle from UserModel.settings. Falls

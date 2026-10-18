@@ -123,7 +123,7 @@ async function main() {
   console.log('');
 
   // Load pre-scraped answers if available (from Prepare tab) — no scraping here
-  const { ApplicationFieldsModel } = await import('@job-agent/shared');
+  const { ApplicationFieldsModel } = await import('@careerlens/shared');
 
   // Launch browser
   console.log('Launching browser...');

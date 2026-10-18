@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { UserModel, llmChat } from '@job-agent/shared';
+import { UserModel, llmChat } from '@careerlens/shared';
 import * as fs from 'fs';
 import * as path from 'path';
 

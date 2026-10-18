@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
 import { connectToDatabase, disconnectDatabase } from '../persistence/db';
-import { ProfileAnswerModel } from '@job-agent/shared';
+import { ProfileAnswerModel } from '@careerlens/shared';
 
 const CANONICAL_RULES: Record<string, string> = {
   remote: 'Yes',

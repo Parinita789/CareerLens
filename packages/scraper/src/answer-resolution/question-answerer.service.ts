@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { llmChat, ProfileAnswerModel } from '@job-agent/shared';
+import { llmChat, ProfileAnswerModel } from '@careerlens/shared';
 import { loadProfile, loadAnswerRules, logQuestionAnswer } from '../persistence/db';
 import { OptionMatcherService } from './option-matcher.service';
 

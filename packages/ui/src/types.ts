@@ -1,4 +1,4 @@
-// Deliberately declared here rather than imported from @job-agent/shared: that
+// Deliberately declared here rather than imported from @careerlens/shared: that
 // package's barrel also exports the Mongoose schemas, DB connection and LLM
 // clients, none of which belong in a browser bundle. Keep this union in step
 // with the shared one — it had gone stale and omitted 'ashby', which is one of
@@ -60,7 +60,7 @@ export interface AlertKeyword {
 /**
  * One queued application to one job. Mirrors the ApplicationTask collection —
  * see the note above for why these types are declared here rather than imported
- * from @job-agent/shared.
+ * from @careerlens/shared.
  */
 export type ApplicationTaskStatus =
   | 'queued'

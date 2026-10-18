@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import mongoose from 'mongoose';
-import { ApplicationTaskModel, JobModel, type ApplicationTaskStatus } from '@job-agent/shared';
+import { ApplicationTaskModel, JobModel, type ApplicationTaskStatus } from '@careerlens/shared';
 import { decideAfterAbandonedRun, decideAfterFailure } from './application-task.policy';
 
 /** Terminal states: a task here will not be picked up again by the dispatcher. */
